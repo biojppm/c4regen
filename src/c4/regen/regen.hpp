@@ -24,18 +24,15 @@ using Rope     = c4::tpl::Rope;
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-void file_get_contents(const char *filename, std::vector< char > *v)
+void file_get_contents(const char *filename, std::string *v)
 {
     std::FILE *fp = std::fopen(filename, "rb");
-    if(fp)
-    {
-        std::fseek(fp, 0, SEEK_END);
-        v->resize(std::ftell(fp));
-        std::rewind(fp);
-        std::fread(&(*v)[0], 1, v->size(), fp);
-        std::fclose(fp);
-    }
-    C4_ERROR("could not open file");
+    C4_ERROR_IF(!fp, "could not open file");
+    std::fseek(fp, 0, SEEK_END);
+    v->resize(std::ftell(fp));
+    std::rewind(fp);
+    std::fread(&(*v)[0], 1, v->size(), fp);
+    std::fclose(fp);
 }
 
 //-----------------------------------------------------------------------------
@@ -171,7 +168,7 @@ struct Generator
         m_src = load_tpl(n, "src");
     }
 
-    std::shared_ptr< Engine > load_tpl(DataNode const& n, csubstr const& name)
+    std::shared_ptr<Engine> load_tpl(DataNode const& n, csubstr const& name)
     {
         auto eng = std::make_shared< Engine >();
         csubstr src;
@@ -344,7 +341,7 @@ struct Writer
         SINGLEFILE,
     } Type_e;
 
-    static Type_e get_type(csubstr type_name)
+    static Type_e str2type(csubstr type_name)
     {
         if(type_name == "stdout")
         {
@@ -375,7 +372,7 @@ struct Writer
 
     Type_e m_type;
 
-    Writer(csubstr type_name) : m_type(get_type(type_name))
+    Writer(csubstr type_name) : m_type(str2type(type_name))
     {
     }
 
@@ -416,7 +413,7 @@ struct Writer
 struct Regen
 {
     std::string m_config_file_name;
-    std::vector< char > m_config_file_yml;
+    std::string m_config_file_yml;
     DataTree m_config_data;
 
     std::vector<  EnumGenerator > m_enum_gens;
