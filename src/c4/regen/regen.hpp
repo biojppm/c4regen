@@ -14,8 +14,6 @@
 namespace c4 {
 namespace regen {
 
-using cspan    = c4::csubstr;
-using  span    = c4::substr;
 using DataNode = c4::yml::NodeRef;
 using DataTree = c4::yml::Tree;
 
@@ -59,8 +57,8 @@ struct CodeEntity : public Region
 
 struct Annotation : public CodeEntity
 {
-    cspan m_key;
-    cspan m_val;
+    csubstr m_key;
+    csubstr m_val;
 };
 
 struct Tag : public CodeEntity
@@ -70,8 +68,8 @@ struct Tag : public CodeEntity
 
 struct Var : public CodeEntity
 {
-    cspan m_name;
-    cspan m_type_name;
+    csubstr m_name;
+    csubstr m_type_name;
 };
 
 struct Class;
@@ -86,8 +84,8 @@ struct EnumSymbol : public CodeEntity
 {
     Enum *m_enum;
 
-    cspan m_sym;
-    cspan m_val;
+    csubstr m_sym;
+    csubstr m_val;
 };
 
 /** an entity which will originate code; ie, cause code to be generated */
@@ -127,17 +125,19 @@ struct CodeChunk
 
 struct Generator
 {
-    cspan  m_name;
-    cspan  m_tag;
+    csubstr  m_name;
+    csubstr  m_tag;
 
-    Engine m_hdr_preamble;
-    Engine m_inl_preamble;
-    Engine m_src_preamble;
-    Engine m_hdr;
-    Engine m_inl;
-    Engine m_src;
+    std::shared_ptr<Engine> m_hdr_preamble;
+    std::shared_ptr<Engine> m_inl_preamble;
+    std::shared_ptr<Engine> m_src_preamble;
+    std::shared_ptr<Engine> m_hdr;
+    std::shared_ptr<Engine> m_inl;
+    std::shared_ptr<Engine> m_src;
 
     bool m_empty;
+
+    Rope m_parsed_rope;
 
     Generator() :
         m_name(),
@@ -153,25 +153,35 @@ struct Generator
     }
     virtual ~Generator() = default;
 
+    Generator(Generator const&) = default;
+    Generator& operator= (Generator const&) = default;
+
+    Generator(Generator &&) = default;
+    Generator& operator= (Generator &&) = default;
+
     void load(DataNode const& n)
     {
         m_name = n.key();
         m_tag = n["tag"].val();
-        load_tpl(n, "hdr_preamble", &m_hdr_preamble);
-        load_tpl(n, "inl_preamble", &m_inl_preamble);
-        load_tpl(n, "src_preamble", &m_src_preamble);
-        load_tpl(n, "hdr", &m_hdr);
-        load_tpl(n, "inl", &m_inl);
-        load_tpl(n, "src", &m_src);
+        m_hdr_preamble = load_tpl(n, "hdr_preamble");
+        m_inl_preamble = load_tpl(n, "inl_preamble");
+        m_src_preamble = load_tpl(n, "src_preamble");
+        m_hdr = load_tpl(n, "hdr");
+        m_inl = load_tpl(n, "inl");
+        m_src = load_tpl(n, "src");
     }
 
-    void load_tpl(DataNode const& n, cspan const& name, Engine *eng)
+    std::shared_ptr< Engine > load_tpl(DataNode const& n, csubstr const& name)
     {
-        cspan src;
+        auto eng = std::make_shared< Engine >();
+        csubstr src;
         n.get_if(name, &src);
-        if(src.empty()) return;
-        eng->parse(src);
-        m_empty = false;
+        if(!src.empty())
+        {
+            eng->parse(src, &m_parsed_rope);
+            m_empty = false;
+        }
+        return eng;
     }
 
     void generate(Originator const& o, DataNode *root, CodeChunk *ch) const
@@ -185,21 +195,16 @@ struct Generator
 
     virtual void create_prop_tree(Originator const& o, DataNode *root) const = 0;
 
-    void render(DataNode const& properties, CodeChunk *ch) const
+    void render(DataNode & properties, CodeChunk *ch) const
     {
-        render_tpl(properties, m_hdr_preamble, &ch->m_hdr_preamble);
-        render_tpl(properties, m_inl_preamble, &ch->m_inl_preamble);
-        render_tpl(properties, m_src_preamble, &ch->m_src_preamble);
-        render_tpl(properties, m_hdr, &ch->m_hdr);
-        render_tpl(properties, m_inl, &ch->m_inl);
-        render_tpl(properties, m_src, &ch->m_src);
+        m_hdr_preamble->render(properties, &ch->m_hdr_preamble);
+        m_inl_preamble->render(properties, &ch->m_inl_preamble);
+        m_src_preamble->render(properties, &ch->m_src_preamble);
+        m_hdr->render(properties, &ch->m_hdr);
+        m_inl->render(properties, &ch->m_inl);
+        m_src->render(properties, &ch->m_src);
     }
 
-    void render_tpl(DataNode const& n, Engine const& eng, Rope *rp) const
-    {
-        *rp = eng.rope();
-        eng.render(n, rp);
-    }
 };
 
 struct EnumGenerator : public Generator
@@ -245,7 +250,7 @@ struct SourceFile : public CodeEntity
     {
         auto f = to_csubstr(m_file);
         m_is_header = false;
-        std::initializer_list< cspan > hdr_exts = {".h", ".hpp", ".hxx", ".h++", ".hh"};
+        std::initializer_list< csubstr > hdr_exts = {".h", ".hpp", ".hxx", ".h++", ".hh"};
         for(auto &ext : hdr_exts)
         {
             if(f.ends_with(ext))
@@ -257,7 +262,7 @@ struct SourceFile : public CodeEntity
         if( ! m_is_header)
         {
             bool gotit = false;
-            std::initializer_list< cspan > src_exts = {".c", ".cpp", ".cxx", ".c++", ".cc"};
+            std::initializer_list< csubstr > src_exts = {".c", ".cpp", ".cxx", ".c++", ".cc"};
             for(auto &ext : src_exts)
             {
                 if(f.ends_with(ext))
@@ -339,7 +344,7 @@ struct Writer
         SINGLEFILE,
     } Type_e;
 
-    static Type_e get_type(cspan type_name)
+    static Type_e get_type(csubstr type_name)
     {
         if(type_name == "stdout")
         {
@@ -370,7 +375,7 @@ struct Writer
 
     Type_e m_type;
 
-    Writer(cspan type_name) : m_type(get_type(type_name))
+    Writer(csubstr type_name) : m_type(get_type(type_name))
     {
     }
 
@@ -430,7 +435,7 @@ struct Regen
 
         DataNode n, r = m_config_data.rootref();
 
-        r.get_if("writer", &m_writer_type, cspan("stdout"));
+        r.get_if("writer", &m_writer_type, csubstr("stdout"));
         m_writer = Writer(m_writer_type);
 
         n = r.find_child("enum");
