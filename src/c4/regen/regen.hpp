@@ -11,6 +11,8 @@
 
 #include <c4/tpl/engine.hpp>
 
+#include "c4/ast/ast.hpp"
+
 namespace c4 {
 namespace regen {
 
@@ -39,13 +41,21 @@ void file_get_contents(const char *filename, std::string *v)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
+struct PosData
+{
+    size_t offset, line, col;
+};
+
+struct Position : public PosData
+{
+    const char * file;
+};
+
 struct Region
 {
-    struct Pos { size_t offset, line, col; };
-
     const char * m_file;
-    Pos          m_start;
-    Pos          m_end;
+    PosData      m_start;
+    PosData      m_end;
 };
 
 struct CodeEntity : public Region
@@ -108,44 +118,39 @@ struct Enum : public Originator
 
 struct Generator;
 
-struct CodeChunk
+template< class T >
+struct CodeInstances
+{
+    T m_hdr_preamble;
+    T m_inl_preamble;
+    T m_src_preamble;
+    T m_hdr;
+    T m_inl;
+    T m_src;
+};
+
+using CodeRopes = CodeInstances< Rope >;
+
+struct CodeChunk : public CodeRopes
 {
     Generator const* m_generator;
     CodeEntity m_originator;
-    Rope m_hdr_preamble;
-    Rope m_inl_preamble;
-    Rope m_src_preamble;
-    Rope m_hdr;
-    Rope m_inl;
-    Rope m_src;
 };
 
-struct Generator
+struct Generator : public CodeInstances< std::shared_ptr<Engine> >
 {
     csubstr  m_name;
     csubstr  m_tag;
 
-    std::shared_ptr<Engine> m_hdr_preamble;
-    std::shared_ptr<Engine> m_inl_preamble;
-    std::shared_ptr<Engine> m_src_preamble;
-    std::shared_ptr<Engine> m_hdr;
-    std::shared_ptr<Engine> m_inl;
-    std::shared_ptr<Engine> m_src;
-
     bool m_empty;
 
-    Rope m_parsed_rope;
+    CodeRopes m_parsed_ropes;
 
     Generator() :
         m_name(),
         m_tag(),
-        m_hdr_preamble(),
-        m_inl_preamble(),
-        m_src_preamble(),
-        m_hdr(),
-        m_inl(),
-        m_src(),
-        m_empty(true)
+        m_empty(true),
+        m_parsed_ropes()
     {
     }
     virtual ~Generator() = default;
@@ -160,22 +165,22 @@ struct Generator
     {
         m_name = n.key();
         m_tag = n["tag"].val();
-        m_hdr_preamble = load_tpl(n, "hdr_preamble");
-        m_inl_preamble = load_tpl(n, "inl_preamble");
-        m_src_preamble = load_tpl(n, "src_preamble");
-        m_hdr = load_tpl(n, "hdr");
-        m_inl = load_tpl(n, "inl");
-        m_src = load_tpl(n, "src");
+        m_hdr_preamble = load_tpl(n, "hdr_preamble", &m_parsed_ropes.m_hdr_preamble);
+        m_inl_preamble = load_tpl(n, "inl_preamble", &m_parsed_ropes.m_inl_preamble);
+        m_src_preamble = load_tpl(n, "src_preamble", &m_parsed_ropes.m_src_preamble);
+        m_hdr = load_tpl(n, "hdr", &m_parsed_ropes.m_hdr);
+        m_inl = load_tpl(n, "inl", &m_parsed_ropes.m_inl);
+        m_src = load_tpl(n, "src", &m_parsed_ropes.m_src);
     }
 
-    std::shared_ptr<Engine> load_tpl(DataNode const& n, csubstr const& name)
+    std::shared_ptr<Engine> load_tpl(DataNode const& n, csubstr const& name, Rope *r)
     {
         auto eng = std::make_shared< Engine >();
         csubstr src;
         n.get_if(name, &src);
         if(!src.empty())
         {
-            eng->parse(src, &m_parsed_rope);
+            eng->parse(src, r);
             m_empty = false;
         }
         return eng;
