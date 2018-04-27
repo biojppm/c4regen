@@ -2,6 +2,7 @@
 *.bck
 \#*
 *~
+.cquery_cached_index
 
 # Visual Studio files
 .vs/
@@ -17,6 +18,7 @@ CMakeLists.txt.user
 build/
 install/
 .python-version
+compile_commands.json
 
 # test files
 /Testing/

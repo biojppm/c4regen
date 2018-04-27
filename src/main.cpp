@@ -27,8 +27,8 @@ void print_ast(const cppast::cpp_file& file)
             prefix.pop_back();
         }
         else if (info.event == visitor_info::container_entity_enter)
-        // entering a new container
         {
+            // entering a new container
             std::cout << prefix << "'" << e.name() << "' - " << to_string(e.kind()) << '\n';
             prefix += "\t";
         }
