@@ -1,0 +1,61 @@
+
+writer: stdout # one of: stdout, samefile, genfile, gengroup, singlefile
+
+generators:
+  -
+    name: enum_symbols
+    type: enum # one of: enum, class, function
+    extract:
+      macro: C4_ENUM
+    hdr_preamble: |
+      #include "enum_pairs.h"
+    hdr: |
+      template<> const EnumPairs<{{enum.type}}> enum_pairs();
+    src: |
+      template<> const EnumPairs<{{enum.type}}> enum_pairs()
+      {
+          static const EnumAndName<{{enum.type}}> vals[] = {
+              {% for e in enum.symbols %}
+              { {{e.name}}, "{{e.name}}"},
+              {% endfor %}
+          };
+          EnumPairs<{{enum.type}}> r(vals);
+          return r;
+      }
+
+  -
+    name: serialize # the name of this generator
+    type: class
+    extract:
+      macro: C4_CLASS
+    hdr_preamble: |
+      #include "c4/serialize.hpp"
+    hdr: |
+      {% if is_tpl %}
+      template <{{tpl_params}}>
+      {% endif %}
+      void serialize(c4::Archive &a, const char *name, {{type}} *var)
+      {
+          {% for m in members %}
+          c4::serialize< {{m.type}} >(a, "{{m.name}}", &var->{{m.name}});
+          {% endfor %}
+      }
+
+  -
+    name: gui # the name of this generator
+    type: class
+    extract:
+      macro: C4_CLASS
+      attr: gui
+    hdr_preamble: |
+      #include "imgui.h"
+    hdr: |
+      {%if is_tpl %}
+      template <{{tpl_params}}>
+      {% endif %}
+      void add_to_gui(const char *name, {{type}} *var)
+      {
+          {% for m in members %}
+          //ImGui::DoStuff< {{m.type}} >("{{m.name}}", &var->{{m.name}});
+          {% endfor %}
+      }    

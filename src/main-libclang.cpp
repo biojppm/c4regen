@@ -3,16 +3,18 @@
 
 int main(int argc, char* argv[])
 {
-    if(argc < 2)
+    if(argc < 3)
     {
-        std::cerr << "Usage: " << argv[0] << " <compile_commands.json-dir> <file> [<more files...>]\n";
+        std::cerr << "Usage: " << argv[0] << " <cfg-yml> <compile_commands.json-dir> <file> [<more files...>]\n";
         return 1;
     }
 
     using namespace c4::ast;
+    using namespace c4::regen;
 
-    CompilationDb db(argv[1]);
-    for(size_t i = 2; i < argc; ++i)
+    Regen rg(argv[1]);
+    CompilationDb db(argv[2]);
+    for(size_t i = 3; i < argc; ++i)
     {
         Index idx(clang_createIndex(0, 0));
         TranslationUnit unit(idx, db, argv[i]);
