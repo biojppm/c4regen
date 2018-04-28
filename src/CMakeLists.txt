@@ -7,6 +7,9 @@ set(src
 
 find_library(LIBCLANG_LIB clang)
 find_path(LIBCLANG_INC clang-c/Index.h)
+if((NOT LIBCLANG_LIB) OR (NOT LIBCLANG_INC))
+    message(FATAL_ERROR "could not find libclang")
+endif()
 
 c4_require_module(C4REGEN c4tpl SUBDIRECTORY ${C4REGEN_EXT_DIR}/c4tpl)
 
