@@ -47,10 +47,12 @@ protected:
         that->m_handle = nullptr;
     }
 
-    ~pimpl_handle()
+#ifndef NDEBUG
+    virtual ~pimpl_handle()
     {
         C4_ASSERT(m_handle == nullptr);
     }
+#endif
 };
 
 
