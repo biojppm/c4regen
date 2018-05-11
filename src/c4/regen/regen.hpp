@@ -36,24 +36,7 @@ void file_get_contents(const char *filename, std::string *v)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-struct PosData
-{
-    size_t offset, line, col;
-};
-
-struct Position : public PosData
-{
-    const char * file;
-};
-
-struct Region
-{
-    const char * m_file;
-    PosData      m_start;
-    PosData      m_end;
-};
-
-struct CodeEntity : public Region
+struct CodeEntity : public ast::Region
 {
 };
 
@@ -437,7 +420,7 @@ public:
 
     void setup()
     {
-        auto f = to_csubstr(m_file);
+        auto f = to_csubstr(file);
         m_is_header = false;
         std::initializer_list< csubstr > hdr_exts = {".h", ".hpp", ".hxx", ".h++", ".hh"};
         for(auto &ext : hdr_exts)
@@ -587,7 +570,7 @@ struct Writer
         switch(m_type)
         {
         case STDOUT: break;
-        case SAMEFILE: output_names->insert(src.m_file); return;
+        case SAMEFILE: output_names->insert(src.file); return;
         case GENFILE: output_names->clear(); return;
         case GENGROUP: output_names->clear(); return;
         case SINGLEFILE: output_names->clear(); return;

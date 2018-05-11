@@ -136,27 +136,86 @@ struct Index : pimpl_handle< CXIndex >
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
+template< class StrGetterPfn, class ...Args >
+inline std::string to_str(StrGetterPfn fn, Args&&... args)
+{
+    std::string s;
+    CXString cs = fn(std::forward<Args>(args)...);
+    s.assign(clang_getCString(cs));
+    clang_disposeString(cs);
+    return s;
+}
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
+struct LocData
+{
+    unsigned offset, line, col;
+};
+
+struct Location : public LocData
+{
+    std::string file;
+
+    Location(){}
+    Location(CXCursor c)
+    {
+        CXSourceLocation loc = clang_getCursorLocation(c);
+        CXFile f;
+        clang_getExpansionLocation(loc, &f, &line, &col, &offset);
+        file = to_str(&clang_getFileName, f);
+    }
+};
+
+struct Region
+{
+    std::string  file;
+    LocData      start;
+    LocData      end;
+
+    Region(){}
+    Region(CXCursor c)
+    {
+        CXSourceRange ext = clang_getCursorExtent(c);
+        CXSourceLocation s = clang_getRangeStart(ext);
+        CXSourceLocation e = clang_getRangeEnd(ext);
+        CXFile f;
+        clang_getExpansionLocation(s, &f, &start.line, &start.col, &start.offset);
+        clang_getExpansionLocation(e, nullptr, &end.line, &end.col, &end.offset);
+        file = to_str(&clang_getFileName, f);
+    }
+};
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
 struct Cursor : public CXCursor
 {
     using CXCursor::CXCursor;
 
     inline Cursor(CXCursor c) : CXCursor(c) {}
 
+    Location location() const { return Location(*this); }
+    Region region() const { return Region(*this); }
+
+    Cursor semantic_parent() const { return Cursor(clang_getCursorSemanticParent(*this)); }
+    Cursor lexical_parent() const { return Cursor(clang_getCursorLexicalParent(*this)); }
+
+    inline CXCursorKind kind() const { return clang_getCursorKind(*this); }
+    inline CXType type() const { return clang_getCursorType(*this); }
+    inline CXType canonical_type() const { return clang_getCanonicalType(type()); }
+    inline CXType result_type() const { return clang_getCursorResultType(*this); }
+    inline CXType named_type() const { return clang_Type_getNamedType(type()); }
+
     // these utility functions are expensive because of the allocations.
     // They should be called once and the results should be stored.
     inline std::string spelling() const { return to_str(&clang_getCursorSpelling, *this); }
-    inline CXCursorKind kind() const { return clang_getCursorKind(*this); }
+    inline std::string type_spelling() const { return to_str(&clang_getTypeSpelling, type()); }
     inline std::string kind_spelling() const { return to_str(&clang_getCursorKindSpelling, kind()); }
-
-    template< class StrGetterPfn, class ...Args >
-    static std::string to_str(StrGetterPfn fn, Args&&... args)
-    {
-        std::string s;
-        CXString cs = fn(std::forward< Args >(args)...);
-        s.assign(clang_getCString(cs));
-        clang_disposeString(cs);
-        return s;
-    }
 };
 
 
@@ -177,12 +236,24 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
         }
     }
 
-    TranslationUnit(Index &idx, CompilationDb const& db, const char *filename, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    TranslationUnit(Index &idx, const char *filename, std::vector<const char*> const& cmd, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    {
+        this->_parse(idx, filename, cmd, options);
+    }
+
+    TranslationUnit(Index &idx, const char *filename, CompilationDb const& db, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
     {
         auto const& cmd = db.get_cmd(filename);
         C4_CHECK(cmd.size() > 1);
+        this->_parse(idx, nullptr, cmd, options);
+    }
+
+private:
+
+    void _parse(Index &idx, const char *filename, std::vector<const char*> const& cmd, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    {
         auto err = clang_parseTranslationUnit2FullArgv(idx,
-                                    nullptr, //nullptr informs that the filename is in the args
+                                    filename, //nullptr informs that the filename is in the args
                                     cmd.data(), (unsigned)cmd.size(),
                                     nullptr, 0,
                                     options,
@@ -200,12 +271,12 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
         C4_CHECK(m_handle != nullptr);
     }
 
+public:
+
     Cursor root() const
     {
         return clang_getTranslationUnitCursor(m_handle);
     }
-
-public:
 
     using visitor_pfn = CXChildVisitResult (*)(Cursor c, Cursor parent, void *data);
 
