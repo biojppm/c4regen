@@ -25,13 +25,7 @@ const option::Descriptor usage[] =
 
 int main(int argc, const char* argv[])
 {
-    auto opts = c4::opt::make_parser(usage, argc, argv);
-    if(opts[HELP])
-    {
-        opts.help();
-        return 0;
-    }
-    opts.check_mandatory({CFG, DIR});
+    auto opts = c4::opt::make_parser(usage, argc, argv, HELP, {CFG, DIR});
 
     using namespace c4::ast;
     using namespace c4::regen;
