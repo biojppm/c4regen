@@ -12,25 +12,10 @@
 #include <c4/tpl/engine.hpp>
 
 #include "c4/ast/ast.hpp"
+#include "c4/fs.hpp"
 
 namespace c4 {
 namespace regen {
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-
-void file_get_contents(const char *filename, std::string *v)
-{
-    printf("opening file: %s\n", filename);
-    std::FILE *fp = std::fopen(filename, "rb");
-    C4_CHECK_MSG(fp != nullptr, "could not open file");
-    std::fseek(fp, 0, SEEK_END);
-    v->resize(std::ftell(fp));
-    std::rewind(fp);
-    std::fread(&(*v)[0], 1, v->size(), fp);
-    std::fclose(fp);
-}
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -558,12 +543,12 @@ struct Writer
         m_type = str2type(s);
     }
 
+    using set_type = std::set< std::string >;
+
     void write(SourceFile const& src) const
     {
-        std::set< std::string > output_names;
+        set_type output_names;
     }
-
-    using set_type = std::set< std::string >;
 
     void get_output_file_names(SourceFile const& src, set_type *output_names) const
     {
@@ -618,7 +603,7 @@ public:
     {
         // read the yml config and parse it
         m_config_file_name = file_name;
-        file_get_contents(m_config_file_name.c_str(), &m_config_file_yml);
+        fs::file_get_contents(m_config_file_name.c_str(), &m_config_file_yml);
         c4::yml::parse(to_csubstr(m_config_file_name), to_substr(m_config_file_yml), &m_config_data);
         c4::yml::NodeRef n, r = m_config_data.rootref();
 

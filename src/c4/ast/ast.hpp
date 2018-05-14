@@ -7,7 +7,9 @@
 #include <clang-c/CXCompilationDatabase.h>
 #include <clang-c/Index.h>
 
-#include "c4/error.hpp"
+#include <c4/error.hpp>
+#include <c4/substr.hpp>
+#include <c4/fs.hpp>
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
