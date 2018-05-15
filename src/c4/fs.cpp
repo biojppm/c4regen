@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <dirent.h>
+#include <fts.h>
 #endif
 
 
@@ -30,29 +30,23 @@ int _exec_stat(const char *pathname, struct stat *s)
 #endif
 }
 
-
-bool path_exists(const char *pathname)
+int _exec_fstat(int fd, struct stat *s)
 {
-#if defined(C4_POSIX) || defined(C4_WIN)
-    struct stat s;
-    return _exec_stat(pathname, &s) == 0;
+#ifdef C4_POSIX
+    return ::fstat(fd, s);
 #else
     C4_NOT_IMPLEMENTED();
-    return false;
 #endif
 }
 
-
-PathType_e path_type(const char *pathname)
+PathType_e _path_type(struct stat *C4_RESTRICT s)
 {
 #if defined(C4_POSIX) || defined(C4_WIN)
-#   ifdef C4_WIN
-#      define _c4is(what) (s.st_mode & _S_IF##what)
+#   if defined(C4_WIN)
+#      define _c4is(what) (s->st_mode & _S_IF##what)
 #   else
-#      define _c4is(what) (S_IS##what(s.st_mode))
+#      define _c4is(what) (S_IS##what(s->st_mode))
 #   endif
-    struct stat s;
-    C4_CHECK(_exec_stat(pathname, &s) == 0);
     // https://www.gnu.org/software/libc/manual/html_node/Testing-File-Type.html
     if(_c4is(REG))
     {
@@ -83,7 +77,28 @@ PathType_e path_type(const char *pathname)
     C4_NOT_IMPLEMENTED();
     return OTHER;
 #endif
+
 }
+
+bool path_exists(const char *pathname)
+{
+#if defined(C4_POSIX) || defined(C4_WIN)
+    struct stat s;
+    return _exec_stat(pathname, &s) == 0;
+#else
+    C4_NOT_IMPLEMENTED();
+    return false;
+#endif
+}
+
+
+PathType_e path_type(const char *pathname)
+{
+    struct stat s;
+    C4_CHECK(_exec_stat(pathname, &s) == 0);
+    return _path_type(&s);
+}
+
 
 path_times times(const char *pathname)
 {
@@ -136,11 +151,11 @@ void mkdirs(char *pathname)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-char *cwd(char *buf, int sz)
+char *cwd(char *buf, size_t sz)
 {
     C4_ASSERT(sz > 0);
 #ifdef C4_POSIX
-    return ::getcwd(&buf[0], sz);
+    return ::getcwd(buf, sz);
 #else
     C4_NOT_IMPLEMENTED();
     return nullptr;
@@ -170,7 +185,20 @@ void delete_path(const char *pathname, bool recursive)
     }
     else
     {
-        C4_NOT_IMPLEMENTED();
+        walk(pathname, [](VisitedPath const& C4_RESTRICT p) -> int {
+                if(p.type == FILE || p.type == SYMLINK)
+                {
+                    delete_file(p.name);
+                }
+                return 0;
+            });
+        walk(pathname, [](VisitedPath const& C4_RESTRICT p) -> int {
+                if(p.type == DIR)
+                {
+                    delete_path(p.name, /*recursive*/false);
+                }
+                return 0;
+            });
     }
 #else
     C4_NOT_IMPLEMENTED();
@@ -182,30 +210,31 @@ void delete_path(const char *pathname, bool recursive)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-namespace detail {
-#ifdef C4_POSIX
-struct DirVisitor
-{
-    ::DIR *m_dir;
-    DirVisitor(const char* dirname)
-    {
-        m_dir = ::opendir(dirname);
-        C4_CHECK(m_dir != nullptr);
-    }
-    ~DirVisitor()
-    {
-        ::closedir(m_dir);
-    }
-};
-#endif
-} // namespace detail
 
-int walk(const char *pathname, PathVisitor fn)
+int walk(const char *pathname, PathVisitor fn, void *user_data)
 {
-#ifdef C4_POSIX
     C4_CHECK(is_dir(pathname));
-    detail::DirVisitor dv(pathname);
-    struct dirent *de = ::readdir(dv.m_dir);
+
+#ifdef C4_POSIX
+    int fts_options = FTS_COMFOLLOW | FTS_LOGICAL | FTS_NOCHDIR;
+    const char* argv[] = {pathname, nullptr};
+    ::FTS *root = ::fts_open((char *const *)argv, fts_options, nullptr);
+    C4_CHECK(root != nullptr);
+
+    ::FTSENT *node;
+    VisitedPath vp;
+    vp.user_data = user_data;
+    while(1)
+    {
+        node = fts_read(root);
+        if( ! node) break;
+        vp.name = node->fts_name;
+        vp.type = _path_type(node->fts_statp);
+        vp.node = node;
+        int ret = fn(vp);
+        if(ret != 0) break;
+    }
+    ::fts_close(root);
 #else
     C4_NOT_IMPLEMENTED();
 #endif

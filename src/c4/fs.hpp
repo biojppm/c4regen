@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 #ifdef C4_POSIX
-struct dirent;
+typedef struct _ftsent FTSENT;
 #endif
 
 namespace c4 {
@@ -49,22 +49,37 @@ inline uint64_t ctime(const char *pathname) { return times(pathname).creation; }
 inline uint64_t mtime(const char *pathname) { return times(pathname).modification; }
 inline uint64_t atime(const char *pathname) { return times(pathname).access; }
 
+
 //-----------------------------------------------------------------------------
 
-/** get the current working directory */
-char *cwd(char *buf, int sz);
+/** get the current working directory. return null if the buffer is smaller
+ * than the required size */
+char *cwd(char *buf, size_t sz);
+
+template< class CharContainer >
+char *cwd(CharContainer *v)
+{
+    if(v->empty()) v->resize(16);
+    while( ! cwd((*v)[0], v->size()))
+    {
+        v->resize(v->size() * 2);
+    }
+    return (*v)[0];
+}
+
 
 //-----------------------------------------------------------------------------
 
 void delete_file(const char *filename);
 void delete_path(const char *pathname, bool recursive=false);
 
+
 //-----------------------------------------------------------------------------
 
 template< class CharContainer >
-void file_get_contents(const char *filename, CharContainer *v)
+void file_get_contents(const char *filename, CharContainer *v, const char* access="rb")
 {
-    ::FILE *fp = ::fopen(filename, "rb");
+    ::FILE *fp = ::fopen(filename, access);
     C4_CHECK_MSG(fp != nullptr, "could not open file");
     ::fseek(fp, 0, SEEK_END);
     v->resize(::ftell(fp));
@@ -115,7 +130,7 @@ struct ScopedTempFile
 
     template< class CharContainer >
     ScopedTempFile(CharContainer const& contents, const char* access=default_access)
-        : ScopedTempFile(&contents[0], contents.size())
+        : ScopedTempFile(&contents[0], contents.size(), access)
     {
     }
 };
@@ -125,18 +140,19 @@ struct ScopedTempFile
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-struct PathVisitorData
+struct VisitedPath
 {
-    PathType_e type;
+    const char  *name;
+    PathType_e   type;
+    void        *user_data;
 #ifdef C4_POSIX
-    struct dirent* data;
+    FTSENT      *node;
 #endif
 };
 
-using PathVisitor = int (*)(const char *pathname, PathVisitorData const &info);
+using PathVisitor = int (*)(VisitedPath const& C4_RESTRICT p);
 
-/** this function is NOT thread-safe */
-int walk(const char *pathname, PathVisitor fn);
+int walk(const char *pathname, PathVisitor fn, void *user_data=nullptr);
 
 } // namespace fs
 } // namespace c4
