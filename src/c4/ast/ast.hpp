@@ -9,7 +9,7 @@
 
 #include <c4/error.hpp>
 #include <c4/substr.hpp>
-#include <c4/fs.hpp>
+#include <c4/fs/fs.hpp>
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -236,6 +236,12 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
             clang_disposeTranslationUnit(m_handle);
             m_handle = nullptr;
         }
+    }
+
+    TranslationUnit(Index &idx, csubstr src, std::vector<const char*> const& cmd, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    {
+        auto tmp = c4::fs::ScopedTmpFile(src.str, src.len);
+        this->_parse(idx, tmp.m_name, cmd, options);
     }
 
     TranslationUnit(Index &idx, const char *filename, std::vector<const char*> const& cmd, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)

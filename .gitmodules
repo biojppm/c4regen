@@ -13,3 +13,6 @@
 [submodule "extern/rapidyaml"]
 	path = extern/rapidyaml
 	url = https://github.com/biojppm/rapidyaml
+[submodule "extern/c4fs"]
+	path = extern/c4fs
+	url = https://github.com/biojppm/c4fs

@@ -1,8 +1,6 @@
 set(src
     c4/ast/ast.hpp
     c4/ast/ast.cpp
-    c4/fs.hpp
-    c4/fs.cpp
     c4/regen/regen.hpp
     c4/regen/regen.cpp
 )
@@ -18,10 +16,11 @@ c4_require_module(C4REGEN rapidyaml SUBDIRECTORY ${C4REGEN_EXT_DIR}/rapidyaml)
 c4_require_module(C4REGEN c4tpl     SUBDIRECTORY ${C4REGEN_EXT_DIR}/c4tpl)
 c4_require_module(C4REGEN c4opt     SUBDIRECTORY ${C4REGEN_EXT_DIR}/c4opt)
 c4_require_module(C4REGEN c4log     SUBDIRECTORY ${C4REGEN_EXT_DIR}/c4log)
+c4_require_module(C4REGEN c4fs      SUBDIRECTORY ${C4REGEN_EXT_DIR}/c4fs)
 
 c4_add_library(C4REGEN c4regen
     SOURCES ${src}
-    LIBS c4tpl c4log ${LIBCLANG_LIB}
+    LIBS c4fs c4tpl c4log ${LIBCLANG_LIB}
     INTERFACES c4opt
     INC_DIRS ${CMAKE_CURRENT_LIST_DIR} ${LIBCLANG_INC}
 )
