@@ -9,4 +9,4 @@ function(c4regen_add_test name)
     c4_add_test(C4REGEN c4regen-test-${name} ON)
 endfunction(c4regen_add_test)
 
-#c4regen_add_test(rope test_regen.cpp)
+c4regen_add_test(basic basic.cpp)

@@ -58,8 +58,7 @@ protected:
 };
 
 
-
-//-----------------------------------------------------------------------------+
+//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
@@ -155,7 +154,7 @@ inline std::string to_str(StrGetterPfn fn, Args&&... args)
 
 struct LocData
 {
-    unsigned offset, line, col;
+    unsigned offset, line, column;
 };
 
 struct Location : public LocData
@@ -167,7 +166,7 @@ struct Location : public LocData
     {
         CXSourceLocation loc = clang_getCursorLocation(c);
         CXFile f;
-        clang_getExpansionLocation(loc, &f, &line, &col, &offset);
+        clang_getExpansionLocation(loc, &f, &line, &column, &offset);
         file = to_str(&clang_getFileName, f);
     }
 };
@@ -185,8 +184,8 @@ struct Region
         CXSourceLocation s = clang_getRangeStart(ext);
         CXSourceLocation e = clang_getRangeEnd(ext);
         CXFile f;
-        clang_getExpansionLocation(s, &f, &start.line, &start.col, &start.offset);
-        clang_getExpansionLocation(e, nullptr, &end.line, &end.col, &end.offset);
+        clang_getExpansionLocation(s, &f, &start.line, &start.column, &start.offset);
+        clang_getExpansionLocation(e, nullptr, &end.line, &end.column, &end.offset);
         file = to_str(&clang_getFileName, f);
     }
 };
@@ -224,6 +223,49 @@ struct Cursor : public CXCursor
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
+/*
+struct Token : public CXToken
+{
+    using CXToken::CXToken;
+
+    Token(CXToken t) : CXToken(t) {}
+
+    CXTokenKind kind() const { return clang_getTokenKind(*this); }
+
+    // these utility functions are expensive because of the allocations.
+    // They should be called once and the results should be stored.
+    inline std::string spelling() const { return to_str(&clang_getTokenSpelling, *this); }
+    inline const char* spelling_c() const { return to_c_str(&clang_getTokenSpelling, *this); }
+};
+
+struct CursorTokens
+{
+    Cursor const* m_cursor{nullptr};
+    CXToken *m_tokens{nullptr};
+    unsigned int m_numtokens{0};
+
+    CursorTokens(Cursor const& cursor) : m_cursor(&cursor)
+    {
+        CXSourceRange range = clang_getCursorExtent(cursor);
+        auto tu = clang_Cursor_getTranslationUnit(cursor);
+        clang_tokenize(tu, range, &m_tokens, &m_numtokens);
+    }
+
+    ~CursorTokens()
+    {
+        if(m_tokens)
+        {
+            auto tu = clang_Cursor_getTranslationUnit(*m_cursor);
+            clang_disposeTokens(tu, m_tokens, m_numtokens);
+        }
+    }
+};
+*/
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 
 struct TranslationUnit : pimpl_handle< CXTranslationUnit >
 {
@@ -238,45 +280,66 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
         }
     }
 
-    TranslationUnit(Index &idx, csubstr src, std::vector<const char*> const& cmd, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    TranslationUnit(Index &idx, csubstr src, const char * const* cmds, size_t cmds_sz, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
     {
         auto tmp = c4::fs::ScopedTmpFile(src.str, src.len);
-        this->_parse(idx, tmp.m_name, cmd, options);
+        this->_parse2(idx, tmp.m_name, cmds, cmds_sz, options);
     }
 
-    TranslationUnit(Index &idx, const char *filename, std::vector<const char*> const& cmd, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    TranslationUnit(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
     {
-        this->_parse(idx, filename, cmd, options);
+        this->_parse_argv(idx, filename, cmds, cmds_sz, options);
     }
 
     TranslationUnit(Index &idx, const char *filename, CompilationDb const& db, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
     {
         auto const& cmd = db.get_cmd(filename);
         C4_CHECK(cmd.size() > 1);
-        this->_parse(idx, nullptr, cmd, options);
+        this->_parse_argv(idx, nullptr, cmd.data(), cmd.size(), options);
     }
 
 private:
 
-    void _parse(Index &idx, const char *filename, std::vector<const char*> const& cmd, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    /** @param filename nullptr informs that the filename is in the args */
+    void _parse_argv(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
     {
-        auto err = clang_parseTranslationUnit2FullArgv(idx,
+        C4_ASSERT(fs::path_exists(filename));
+        CXErrorCode err = clang_parseTranslationUnit2FullArgv(idx,
                                     filename, //nullptr informs that the filename is in the args
-                                    cmd.data(), (unsigned)cmd.size(),
+                                    cmds, (unsigned)cmds_sz,
                                     nullptr, 0,
                                     options,
                                     &m_handle);
+        check_err(err, m_handle);
+    }
+
+    void _parse2(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    {
+        C4_ASSERT(fs::path_exists(filename));
+        CXErrorCode err = clang_parseTranslationUnit2(idx,
+                                    filename, //nullptr informs that the filename is in the args
+                                    cmds, (unsigned)cmds_sz,
+                                    nullptr, 0,
+                                    options,
+                                    &m_handle);
+        check_err(err, m_handle);
+    }
+
+public:
+
+    static void check_err(CXErrorCode err, CXTranslationUnit translation_unit)
+    {
         switch(err)
         {
-        case CXError_Failure: C4_ERROR("A generic error code, no further details are available."); break;
-        case CXError_Crashed: C4_ERROR("libclang crashed while performing the requested operation."); break;
+        case CXError_Failure:          C4_ERROR("A generic error code, no further details are available."); break;
+        case CXError_Crashed:          C4_ERROR("libclang crashed while performing the requested operation."); break;
         case CXError_InvalidArguments: C4_ERROR("function detected that the arguments violate the function contract."); break;
-        case CXError_ASTReadError: C4_ERROR("An AST deserialization error has occurred."); break;
+        case CXError_ASTReadError:     C4_ERROR("An AST deserialization error has occurred."); break;
         case CXError_Success:
         default:
             break;
         }
-        C4_CHECK(m_handle != nullptr);
+        C4_CHECK(translation_unit != nullptr);
     }
 
 public:

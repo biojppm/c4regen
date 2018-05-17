@@ -1,7 +1,7 @@
 #include <c4/regen/regen.hpp>
 #include <c4/opt/opt.hpp>
-
-#include <iostream>
+#include <c4/log/log.hpp>
+#include <c4/std/std.hpp>
 
 
 //-----------------------------------------------------------------------------
@@ -37,15 +37,13 @@ int main(int argc, const char* argv[])
         Index idx(clang_createIndex(0, 0));
         TranslationUnit unit(idx, source_file, db);
         unit.visit_children([](Cursor c, Cursor parent, void*){
-            std::string kind = c.kind_spelling();
-            std::string cont = c.spelling();
             std::string type = c.type_spelling();
+            std::string cont = c.spelling();
             Location loc = c.location();
-            std::cout << loc.file << ":" << loc.line << ": " << loc.col << "(" << loc.offset << "B)";
-            std::cout << ": " << kind;
-            if( ! type.empty()) std::cout << ": type='" << type << "'";
-            if( ! cont.empty()) std::cout << ": cont='" << cont << "'";
-            std::cout << "\n";
+            c4::_log("{}:{}: {}({}B): {}", loc.file_c, loc.line, loc.column, loc.offset, c.kind_spelling());
+            if( ! type.empty()) c4::_log(": type='{}'", type);
+            if( ! cont.empty()) c4::_log(": cont='{}'", cont);
+            c4::_print('\n');
             return CXChildVisit_Recurse;
         });
     }
