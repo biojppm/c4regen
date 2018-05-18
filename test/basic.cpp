@@ -31,9 +31,8 @@ struct test_unit
 
 TEST(foo, bar)
 {
-    test_unit tu(R"(
-#define C4_ENUM()
-C4_ENUM()
+    test_unit tu(R"(#define C4_ENUM(...)
+C4_ENUM(a=b)
 using TestEnum_e = enum {
     FOO,
     BAR
@@ -42,19 +41,26 @@ int main() { return 0; }
 )");
     tu.unit.visit_children([](Cursor c, Cursor parent, void* data){
             auto &tu = *(test_unit*) data;
-            const char* type = c.type_spelling(tu.idx);
-            const char* cont = c.spelling(tu.idx);
+            const char* name  = c.display_name(tu.idx);
+            const char* type  = c.type_spelling(tu.idx);
+            const char* spell = c.spelling(tu.idx);
             Location loc = c.location(tu.idx);
             c4::_log("{}:{}: {}({}B): {}", loc.file, loc.line, loc.column, loc.offset, c.kind_spelling(tu.idx));
+            if(strlen(name)) c4::_log(": name='{}'", name);
             if(strlen(type)) c4::_log(": type='{}'", type);
-            if(strlen(cont)) c4::_log(": cont='{}'", cont);
+            if(strlen(spell)) c4::_log(": spell='{}'", spell);
             c4::_print('\n');
             if(c.kind() == CXCursor_MacroExpansion)
             {
                 c4::log("{}:{}: GOTIT!", loc.file, loc.line);
+                EXPECT_STREQ(name, "C4_ENUM");
             }
             return CXChildVisit_Recurse;
         }, &tu);
+    std::vector<Cursor> ws;
+
+    tu.unit.select_tagged("C4_ENUM", &ws);
+    EXPECT_EQ(ws.size(), 1);
 }
 
 

@@ -35,6 +35,7 @@ struct Annotation : public CodeEntity
 
 struct Tag : public CodeEntity
 {
+    csubstr m_tag;
     std::vector<Annotation> m_annotations;
 };
 
@@ -152,6 +153,58 @@ struct Extractor
     std::string m_tag;
     std::string m_attr;
 
+    size_t extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Cursor> *out) const
+    {
+        switch(m_type)
+        {
+        case EXTR_ALL:
+        {
+            ast::CursorMatcher matcher{kind, ""};
+            return tu.select(matcher, out);
+        }
+        case EXTR_TAGGED_MACRO:
+        {
+            // select all macro expansions
+            ast::CursorMatcher matcher{CXCursor_MacroExpansion, to_csubstr(m_tag)};
+            size_t sz = out->size();
+            size_t ret = tu.select(matcher, out);
+            // filter for the specified kind
+            size_t curr = 0;
+            for(size_t i = 0; i < ret; ++i)
+            {
+                ast::Cursor c = (*out)[sz + i].next_sibling();
+                if(c.kind() == kind)
+                {
+                    (*out)[sz + curr] = c;
+                    ++curr;
+                }
+            }
+            return curr;
+        }
+        case EXTR_TAGGED_MACRO_ANNOTATED:
+        {
+            // select all macro expansions
+            ast::CursorMatcher matcher{CXCursor_MacroExpansion, to_csubstr(m_tag)};
+            size_t sz = out->size();
+            size_t ret = tu.select(matcher, out);
+            // filter for the specified kind
+            size_t curr = 0;
+            for(size_t i = 0; i < ret; ++i)
+            {
+                ast::Cursor c = (*out)[sz + i].next_sibling();
+                if(c.kind() == kind)
+                {
+                    (*out)[sz + curr] = c;
+                    ++curr;
+                }
+            }
+        }
+        default:
+            C4_NOT_IMPLEMENTED();
+        }
+        return false;
+    }
+
     bool must_extract(c4::ast::Index &idx, c4::ast::Cursor c) const
     {
         switch(m_type)
@@ -161,7 +214,7 @@ struct Extractor
         case EXTR_TAGGED_MACRO:
             if(c.kind() == CXCursor_MacroExpansion)
             {
-                if(c.spelling(idx) == m_tag)
+                if(c.display_name(idx) == m_tag)
                 {
                     return true;
                 }
@@ -170,7 +223,7 @@ struct Extractor
         case EXTR_TAGGED_MACRO_ANNOTATED:
             if(c.kind() == CXCursor_MacroExpansion)
             {
-                if(c.spelling(idx) == m_tag)
+                if(c.display_name(idx) == m_tag)
                 {
                     return true;
                 }
