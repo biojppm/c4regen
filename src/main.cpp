@@ -34,15 +34,16 @@ int main(int argc, const char* argv[])
     CompilationDb db(opts(DIR));
     for(const char* source_file : opts.posn_args())
     {
-        Index idx(clang_createIndex(0, 0));
+        Index idx;
         TranslationUnit unit(idx, source_file, db);
-        unit.visit_children([](Cursor c, Cursor parent, void*){
-            std::string type = c.type_spelling();
-            std::string cont = c.spelling();
-            Location loc = c.location();
-            c4::_log("{}:{}: {}({}B): {}", loc.file_c, loc.line, loc.column, loc.offset, c.kind_spelling());
-            if( ! type.empty()) c4::_log(": type='{}'", type);
-            if( ! cont.empty()) c4::_log(": cont='{}'", cont);
+        unit.visit_children([](Cursor c, Cursor parent, void* data){
+            Index &idx = *(Index*)data;
+            const char* type = c.type_spelling(idx);
+            const char* cont = c.spelling(idx);
+            Location loc = c.location(idx);
+            c4::_log("{}:{}: {}({}B): {}", loc.file, loc.line, loc.column, loc.offset, c.kind_spelling(idx));
+            if(strlen(type)) c4::_log(": type='{}'", type);
+            if(strlen(cont)) c4::_log(": cont='{}'", cont);
             c4::_print('\n');
             return CXChildVisit_Recurse;
         });

@@ -23,6 +23,8 @@ namespace regen {
 
 struct CodeEntity : public ast::Region
 {
+    ast::Index  *m_index{nullptr};
+    ast::Cursor  m_cursor;
 };
 
 struct Annotation : public CodeEntity
@@ -33,7 +35,7 @@ struct Annotation : public CodeEntity
 
 struct Tag : public CodeEntity
 {
-    std::vector< Annotation > m_annotations;
+    std::vector<Annotation> m_annotations;
 };
 
 struct Var : public CodeEntity
@@ -58,6 +60,16 @@ struct EnumSymbol : public CodeEntity
     csubstr m_val;
 };
 
+struct DataType : public CodeEntity
+{
+};
+
+struct Function;
+struct FunctionParameter : public CodeEntity
+{
+    DataType m_data_type;
+};
+
 /** an entity which will originate code; ie, cause code to be generated */
 struct Originator : public CodeEntity
 {
@@ -74,7 +86,9 @@ typedef enum {
     EXTR_TAGGED_MACRO_ANNOTATED, ///< extract only entities with an annotation within a tag macro
 } ExtractorType_e;
 
-/** YAML examples:
+/** A class which examines the AST and extracts useful entities.
+ *
+ * YAML config examples:
  * for EXTR_ALL:
  *
  * @begincode
@@ -109,7 +123,6 @@ struct Extractor
         C4_CHECK(n.key() == "extract");
         if(n.is_keyval())
         {
-            csubstr val = n.val();
             if(n.val() == "all")
             {
                 m_type = EXTR_ALL;
@@ -139,21 +152,36 @@ struct Extractor
     std::string m_tag;
     std::string m_attr;
 
-    bool must_extract(c4::ast::Cursor c) const
+    bool must_extract(c4::ast::Index &idx, c4::ast::Cursor c) const
     {
         switch(m_type)
         {
         case EXTR_ALL:
             return true;
         case EXTR_TAGGED_MACRO:
+            if(c.kind() == CXCursor_MacroExpansion)
+            {
+                if(c.spelling(idx) == m_tag)
+                {
+                    return true;
+                }
+            }
+            return false;
         case EXTR_TAGGED_MACRO_ANNOTATED:
-            C4_NOT_IMPLEMENTED();
+            if(c.kind() == CXCursor_MacroExpansion)
+            {
+                if(c.spelling(idx) == m_tag)
+                {
+                    return true;
+                }
+            }
             break;
         default:
             C4_NOT_IMPLEMENTED();
         }
         return false;
     }
+
 
 };
 
@@ -313,15 +341,6 @@ struct ClassGenerator : public Generator
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-struct DataType : public CodeEntity
-{
-};
-
-struct FunctionParameter : public CodeEntity
-{
-    DataType m_data_type;
-};
-
 struct Function : public Originator
 {
     DataType m_return_type;
@@ -349,6 +368,7 @@ typedef enum {
 
 struct SourceFile : public CodeEntity
 {
+
     template<class EntityT, class GeneratorT>
     struct entity_collection
     {
@@ -401,7 +421,7 @@ public:
 
     void setup()
     {
-        auto f = to_csubstr(file);
+        auto f = to_csubstr(m_file);
         m_is_header = false;
         std::initializer_list< csubstr > hdr_exts = {".h", ".hpp", ".hxx", ".h++", ".hh"};
         for(auto &ext : hdr_exts)
@@ -469,8 +489,8 @@ public:
     {
         switch(p.entity_type)
         {
-        case ENT_ENUM: return &m_enums.m_entities[p.pos];
-        case ENT_CLASS: return &m_classes.m_entities[p.pos];
+        case ENT_ENUM:     return &m_enums    .m_entities[p.pos];
+        case ENT_CLASS:    return &m_classes  .m_entities[p.pos];
         case ENT_FUNCTION: return &m_functions.m_entities[p.pos];
         default:
             C4_ERROR("unknown entity type");
@@ -551,7 +571,7 @@ struct Writer
         switch(m_type)
         {
         case STDOUT: break;
-        case SAMEFILE: output_names->insert(src.file); return;
+        case SAMEFILE: output_names->insert(src.m_file); return;
         case GENFILE: output_names->clear(); return;
         case GENGROUP: output_names->clear(); return;
         case SINGLEFILE: output_names->clear(); return;
@@ -601,7 +621,8 @@ public:
         m_config_file_name = file_name;
         fs::file_get_contents(m_config_file_name.c_str(), &m_config_file_yml);
         c4::yml::parse(to_csubstr(m_config_file_name), to_substr(m_config_file_yml), &m_config_data);
-        c4::yml::NodeRef n, r = m_config_data.rootref();
+        c4::yml::NodeRef r = m_config_data.rootref();
+        c4::yml::NodeRef n;
 
         m_writer.load(r);
 
@@ -609,6 +630,7 @@ public:
         m_class_gens.clear();
         m_function_gens.clear();
         m_all_gens.clear();
+
         n = r.find_child("generators");
         if( ! n.valid()) return;
         for(auto const& ch : n.children())

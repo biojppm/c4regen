@@ -18,7 +18,13 @@
 namespace c4 {
 namespace ast {
 
-template< class T >
+struct Cursor;
+using visitor_pfn = CXChildVisitResult (*)(Cursor c, Cursor parent, void *data);
+
+
+//-----------------------------------------------------------------------------
+
+template <class T>
 struct pimpl_handle
 {
     T m_handle;
@@ -62,10 +68,10 @@ protected:
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-struct CompilationDb : pimpl_handle< CXCompilationDatabase >
+struct CompilationDb : pimpl_handle<CXCompilationDatabase>
 {
 
-    CompilationDb(const char* build_dir) : pimpl_handle< CXCompilationDatabase >()
+    CompilationDb(const char* build_dir) : pimpl_handle<CXCompilationDatabase>()
     {
         CXCompilationDatabase_Error err;
         m_handle = clang_CompilationDatabase_fromDirectory(build_dir, &err);
@@ -81,7 +87,7 @@ struct CompilationDb : pimpl_handle< CXCompilationDatabase >
         }
     }
 
-    std::vector< const char* > const& get_cmd(const char* full_file_name) const
+    std::vector<const char*> const& get_cmd(const char* full_file_name) const
     {
         CXCompileCommands cmds = clang_CompilationDatabase_getCompileCommands(m_handle, full_file_name);
         unsigned sz = clang_CompileCommands_getSize(cmds);
@@ -109,20 +115,29 @@ struct CompilationDb : pimpl_handle< CXCompilationDatabase >
         return s_cmd;
     }
 
-    thread_local static std::vector< const char* > s_cmd;
-    thread_local static std::vector< std::string > s_cmd_buf;
+    thread_local static std::vector<const char*> s_cmd;
+    thread_local static std::vector<std::string> s_cmd_buf;
 };
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-struct Index : pimpl_handle< CXIndex >
+struct Index : pimpl_handle<CXIndex>
 {
-    using pimpl_handle< CXIndex >::pimpl_handle;
+    using pimpl_handle<CXIndex>::pimpl_handle;
+
+    Index() : pimpl_handle(clang_createIndex(/*excludeDeclarationsFromPCH*/0, /*displayDiagnostics*/1))
+    {
+    }
 
     ~Index()
     {
+        for(auto &s : m_strings)
+        {
+            clang_disposeString(s);
+        }
+        m_strings.clear();
         if(m_handle)
         {
             clang_disposeIndex(m_handle);
@@ -130,22 +145,21 @@ struct Index : pimpl_handle< CXIndex >
         }
     }
 
+    std::vector<CXString> m_strings;
+    const char* get_string(CXString s)
+    {
+        m_strings.push_back(s);
+        return clang_getCString(s);
+    }
+
+    template< class StrGetterPfn, class ...Args >
+    const char* to_str(StrGetterPfn fn, Args&&... args)
+    {
+        CXString cs = fn(std::forward<Args>(args)...);
+        return get_string(cs);
+    }
+
 };
-
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-
-template< class StrGetterPfn, class ...Args >
-inline std::string to_str(StrGetterPfn fn, Args&&... args)
-{
-    std::string s;
-    CXString cs = fn(std::forward<Args>(args)...);
-    s.assign(clang_getCString(cs));
-    clang_disposeString(cs);
-    return s;
-}
 
 
 //-----------------------------------------------------------------------------
@@ -159,34 +173,34 @@ struct LocData
 
 struct Location : public LocData
 {
-    std::string file;
+    const char* file;
 
     Location(){}
-    Location(CXCursor c)
+    Location(Index &idx, CXCursor c)
     {
         CXSourceLocation loc = clang_getCursorLocation(c);
         CXFile f;
         clang_getExpansionLocation(loc, &f, &line, &column, &offset);
-        file = to_str(&clang_getFileName, f);
+        file = idx.to_str(&clang_getFileName, f);
     }
 };
 
 struct Region
 {
-    std::string  file;
-    LocData      start;
-    LocData      end;
+    const char* m_file;
+    LocData     m_start;
+    LocData     m_end;
 
     Region(){}
-    Region(CXCursor c)
+    Region(Index &idx, CXCursor c)
     {
-        CXSourceRange ext = clang_getCursorExtent(c);
+        CXSourceRange  ext = clang_getCursorExtent(c);
         CXSourceLocation s = clang_getRangeStart(ext);
         CXSourceLocation e = clang_getRangeEnd(ext);
         CXFile f;
-        clang_getExpansionLocation(s, &f, &start.line, &start.column, &start.offset);
-        clang_getExpansionLocation(e, nullptr, &end.line, &end.column, &end.offset);
-        file = to_str(&clang_getFileName, f);
+        clang_getExpansionLocation(s, &f, &m_start.line, &m_start.column, &m_start.offset);
+        clang_getExpansionLocation(e, nullptr, &m_end.line, &m_end.column, &m_end.offset);
+        m_file = idx.to_str(&clang_getFileName, f);
     }
 };
 
@@ -200,23 +214,23 @@ struct Cursor : public CXCursor
 
     inline Cursor(CXCursor c) : CXCursor(c) {}
 
-    Location location() const { return Location(*this); }
-    Region region() const { return Region(*this); }
+    Location location(Index &idx) const { return Location(idx, *this); }
+    Region region(Index &idx) const { return Region(idx, *this); }
 
     Cursor semantic_parent() const { return Cursor(clang_getCursorSemanticParent(*this)); }
     Cursor lexical_parent() const { return Cursor(clang_getCursorLexicalParent(*this)); }
 
-    inline CXCursorKind kind() const { return clang_getCursorKind(*this); }
-    inline CXType type() const { return clang_getCursorType(*this); }
-    inline CXType canonical_type() const { return clang_getCanonicalType(type()); }
-    inline CXType result_type() const { return clang_getCursorResultType(*this); }
-    inline CXType named_type() const { return clang_Type_getNamedType(type()); }
+    CXCursorKind kind() const { return clang_getCursorKind(*this); }
+    CXType type() const { return clang_getCursorType(*this); }
+    CXType canonical_type() const { return clang_getCanonicalType(type()); }
+    CXType result_type() const { return clang_getCursorResultType(*this); }
+    CXType named_type() const { return clang_Type_getNamedType(type()); }
 
     // these utility functions are expensive because of the allocations.
     // They should be called once and the results should be stored.
-    inline std::string spelling() const { return to_str(&clang_getCursorSpelling, *this); }
-    inline std::string type_spelling() const { return to_str(&clang_getTypeSpelling, type()); }
-    inline std::string kind_spelling() const { return to_str(&clang_getCursorKindSpelling, kind()); }
+    const char*      spelling(Index &idx) const { return idx.to_str(&clang_getCursorSpelling, *this); }
+    const char* type_spelling(Index &idx) const { return idx.to_str(&clang_getTypeSpelling, type()); }
+    const char* kind_spelling(Index &idx) const { return idx.to_str(&clang_getCursorKindSpelling, kind()); }
 };
 
 
@@ -267,6 +281,8 @@ struct CursorTokens
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
+constexpr const unsigned default_options = CXTranslationUnit_DetailedPreprocessingRecord;
+
 struct TranslationUnit : pimpl_handle< CXTranslationUnit >
 {
     using pimpl_handle< CXTranslationUnit >::pimpl_handle;
@@ -280,18 +296,19 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
         }
     }
 
-    TranslationUnit(Index &idx, csubstr src, const char * const* cmds, size_t cmds_sz, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    TranslationUnit(Index &idx, csubstr src, const char * const* cmds, size_t cmds_sz, unsigned options=default_options, bool delete_tmp=true)
     {
-        auto tmp = c4::fs::ScopedTmpFile(src.str, src.len);
+        auto tmp = c4::fs::ScopedTmpFile(src.str, src.len, "c4trunittmp.XXXXXXXX.cpp");
+        tmp.do_delete(delete_tmp);
         this->_parse2(idx, tmp.m_name, cmds, cmds_sz, options);
     }
 
-    TranslationUnit(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    TranslationUnit(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=default_options)
     {
         this->_parse_argv(idx, filename, cmds, cmds_sz, options);
     }
 
-    TranslationUnit(Index &idx, const char *filename, CompilationDb const& db, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    TranslationUnit(Index &idx, const char *filename, CompilationDb const& db, unsigned options=default_options)
     {
         auto const& cmd = db.get_cmd(filename);
         C4_CHECK(cmd.size() > 1);
@@ -301,7 +318,7 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
 private:
 
     /** @param filename nullptr informs that the filename is in the args */
-    void _parse_argv(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    void _parse_argv(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options)
     {
         C4_ASSERT(fs::path_exists(filename));
         CXErrorCode err = clang_parseTranslationUnit2FullArgv(idx,
@@ -313,7 +330,7 @@ private:
         check_err(err, m_handle);
     }
 
-    void _parse2(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=CXTranslationUnit_DetailedPreprocessingRecord)
+    void _parse2(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options)
     {
         C4_ASSERT(fs::path_exists(filename));
         CXErrorCode err = clang_parseTranslationUnit2(idx,
@@ -349,20 +366,12 @@ public:
         return clang_getTranslationUnitCursor(m_handle);
     }
 
-    using visitor_pfn = CXChildVisitResult (*)(Cursor c, Cursor parent, void *data);
-
     struct _visitor_data
     {
         visitor_pfn visitor;
         void *data;
         bool same_unit_only;
     };
-
-    void visit_children(visitor_pfn visitor, void *data=nullptr, bool same_unit_only=true)
-    {
-        _visitor_data this_{visitor, data, same_unit_only};
-        clang_visitChildren(root(), s_visit, &this_);
-    }
 
     void visit_children(visitor_pfn visitor, void *data=nullptr, bool same_unit_only=true) const
     {
