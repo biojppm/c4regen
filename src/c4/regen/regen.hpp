@@ -17,58 +17,132 @@
 namespace c4 {
 namespace regen {
 
+
+//-----------------------------------------------------------------------------
+
+inline bool is_idchar(char c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+        || (c == '_' || c == '-' || c == '~' || c == '$');
+}
+
+csubstr find_pair(csubstr s, char open, char close, bool allow_nested=false);
+
+
+//-----------------------------------------------------------------------------
+
+bool is_hdr(csubstr filename);
+bool is_src(csubstr filename);
+
+void add_hdr(const char* ext);
+void add_src(const char* ext);
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
+struct Tag;
+
+
+struct astEntity
+{
+    csubstr      file_contents;
+    ast::Index  *idx;
+    ast::Cursor  cursor;
+    ast::Cursor  parent;
+    Tag         *tag;
+};
 
 struct CodeEntity : public ast::Region
 {
-    ast::Index  *m_index{nullptr};
-    ast::Cursor  m_cursor;
+    ast::Index const *m_index{nullptr};
+    ast::Cursor       m_cursor;
+    ast::Cursor       m_parent;
+    csubstr           m_str;
+    Tag        const *m_tag{nullptr};
+
+    void init_entity(astEntity const& C4_RESTRICT e)
+    {
+        init_region(*e.idx, e.cursor);
+        m_index = e.idx;
+        m_cursor = e.cursor;
+        m_parent = e.parent;
+        m_str = get_str(e.file_contents);
+        m_tag = e.tag;
+    }
+
 };
 
-struct Annotation : public CodeEntity
-{
-    csubstr m_key;
-    csubstr m_val;
-};
 
+
+/** A tag used to mark and/or annotate entities. Examples:
+ *
+ *@begincode
+ * C4_TAG()
+ * // accepts annotations as YAML code:
+ * C4_TAG(a, b: c, d: [e, f, g], h: {i: j, k: l})
+ *@endcode
+ *
+ */
 struct Tag : public CodeEntity
 {
-    csubstr m_tag;
-    std::vector<Annotation> m_annotations;
-};
-
-struct Var : public CodeEntity
-{
     csubstr m_name;
-    csubstr m_type_name;
-};
+    csubstr m_spec_str;
+    c4::yml::Tree m_annotations;
 
-struct Class;
-struct Member : public Var
-{
-    Class *m_class;
+    void init_tag(astEntity const& C4_RESTRICT e)
+    {
+        this->init_entity(e);
+        parse_annotations();
+    }
 
-};
+    void parse_annotations()
+    {
+        m_annotations.clear();
+        bool started = false;
+        bool keyval = false;
+        csubstr s = find_pair(m_str, '(', ')', /*allow_nested*/true);
+        C4_ASSERT(s.len >= 2 && s.begins_with('(') && s.ends_with(')'));
+        m_spec_str = s.range(1, s.len-1);
+        for(size_t i = 0; i < m_spec_str.len; ++i)
+        {
+            auto c = m_spec_str[i];
+            if( ! started)
+            {
+                if(is_idchar(c))
+                {
+                    started = true;
+                }
+            }
+            else
+            {
 
-struct Enum;
-struct EnumSymbol : public CodeEntity
-{
-    Enum *m_enum;
+            }
+        }
 
-    csubstr m_sym;
-    csubstr m_val;
+    }
 };
 
 struct DataType : public CodeEntity
 {
 };
 
+struct Var : public CodeEntity
+{
+    csubstr  m_name;
+    DataType m_type;
+};
+
+struct Class;
+struct Member : public Var
+{
+    Class *m_class;
+};
+
 struct Function;
 struct FunctionParameter : public CodeEntity
 {
-    DataType m_data_type;
+    Function *m_function;
+    DataType  m_data_type;
 };
 
 /** an entity which will originate code; ie, cause code to be generated */
@@ -113,130 +187,15 @@ typedef enum {
  */
 struct Extractor
 {
-    void load(c4::yml::NodeRef n)
-    {
-        C4_CHECK(n.valid());
-        m_type = EXTR_ALL;
-        m_tag.clear();
-        m_attr.clear();
-
-        if(!n.valid()) return;
-        C4_CHECK(n.key() == "extract");
-        if(n.is_keyval())
-        {
-            if(n.val() == "all")
-            {
-                m_type = EXTR_ALL;
-            }
-            else
-            {
-                C4_ERROR("unknown extractor");
-            }
-        }
-        else
-        {
-            c4::yml::NodeRef m = n["macro"];
-            C4_CHECK(m.valid());
-            m_tag.assign(m.val().str, m.val().len);
-            m_type = EXTR_TAGGED_MACRO;
-
-            c4::yml::NodeRef a = n.find_child("attr");
-            if(a.valid())
-            {
-                m_type = EXTR_TAGGED_MACRO_ANNOTATED;
-                m_attr.assign(a.val().str, a.val().len);
-            }
-        }
-    }
-
     ExtractorType_e m_type{EXTR_ALL};
     std::string m_tag;
     std::string m_attr;
 
-    size_t extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Cursor> *out) const
-    {
-        switch(m_type)
-        {
-        case EXTR_ALL:
-        {
-            ast::CursorMatcher matcher{kind, ""};
-            return tu.select(matcher, out);
-        }
-        case EXTR_TAGGED_MACRO:
-        {
-            // select all macro expansions
-            ast::CursorMatcher matcher{CXCursor_MacroExpansion, to_csubstr(m_tag)};
-            size_t sz = out->size();
-            size_t ret = tu.select(matcher, out);
-            // filter for the specified kind
-            size_t curr = 0;
-            for(size_t i = 0; i < ret; ++i)
-            {
-                ast::Cursor c = (*out)[sz + i].next_sibling();
-                if(c.kind() == kind)
-                {
-                    (*out)[sz + curr] = c;
-                    ++curr;
-                }
-            }
-            return curr;
-        }
-        case EXTR_TAGGED_MACRO_ANNOTATED:
-        {
-            // select all macro expansions
-            ast::CursorMatcher matcher{CXCursor_MacroExpansion, to_csubstr(m_tag)};
-            size_t sz = out->size();
-            size_t ret = tu.select(matcher, out);
-            // filter for the specified kind
-            size_t curr = 0;
-            for(size_t i = 0; i < ret; ++i)
-            {
-                ast::Cursor c = (*out)[sz + i].next_sibling();
-                if(c.kind() == kind)
-                {
-                    (*out)[sz + curr] = c;
-                    ++curr;
-                }
-            }
-        }
-        default:
-            C4_NOT_IMPLEMENTED();
-        }
-        return false;
-    }
-
-    bool must_extract(c4::ast::Index &idx, c4::ast::Cursor c) const
-    {
-        switch(m_type)
-        {
-        case EXTR_ALL:
-            return true;
-        case EXTR_TAGGED_MACRO:
-            if(c.kind() == CXCursor_MacroExpansion)
-            {
-                if(c.display_name(idx) == m_tag)
-                {
-                    return true;
-                }
-            }
-            return false;
-        case EXTR_TAGGED_MACRO_ANNOTATED:
-            if(c.kind() == CXCursor_MacroExpansion)
-            {
-                if(c.display_name(idx) == m_tag)
-                {
-                    return true;
-                }
-            }
-            break;
-        default:
-            C4_NOT_IMPLEMENTED();
-        }
-        return false;
-    }
-
-
+    void load(c4::yml::NodeRef n);
+    size_t extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Cursor> *out) const;
+    bool must_extract(c4::ast::Index &idx, c4::ast::Cursor c) const;
 };
+
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -244,7 +203,7 @@ struct Extractor
 
 struct Generator;
 
-struct Tpl
+struct CodeTemplate
 {
     std::shared_ptr<c4::tpl::Engine> engine;
     c4::tpl::Rope parsed_rope;
@@ -256,21 +215,22 @@ struct Tpl
         engine.reset();
         csubstr src;
         n.get_if(name, &src);
-        if( ! src.empty())
+        if(src.not_empty())
         {
-            engine = std::make_shared< c4::tpl::Engine >();
+            engine = std::make_shared<c4::tpl::Engine>();
             engine->parse(src, &parsed_rope);
         }
         return ! empty();
     }
 
-    void render(c4::yml::NodeRef & properties, c4::tpl::Rope *r) const
+    void render(c4::yml::NodeRef properties, c4::tpl::Rope *r) const
     {
         engine->render(properties, r);
     }
 };
 
-template< class T >
+
+template<class T>
 struct CodeInstances
 {
     T m_hdr_preamble;
@@ -281,26 +241,25 @@ struct CodeInstances
     T m_src;
 };
 
-struct CodeChunk : public CodeInstances< c4::tpl::Rope >
+
+struct CodeChunk : public CodeInstances<c4::tpl::Rope>
 {
     Generator const* m_generator;
-    CodeEntity m_originator;
+    CodeEntity const* m_originator;
 };
 
-struct Generator
+
+struct Generator : public CodeInstances<CodeTemplate>
 {
-    csubstr  m_name;
+    csubstr   m_name;
     Extractor m_extractor;
-
-    bool m_empty;
-
-    CodeInstances<Tpl> m_templates;
+    bool      m_empty;
 
     Generator() :
+        CodeInstances<CodeTemplate>(),
         m_name(),
         m_extractor(),
-        m_empty(true),
-        m_templates()
+        m_empty(true)
     {
     }
     virtual ~Generator() = default;
@@ -318,36 +277,36 @@ struct Generator
         load_templates(n);
     }
 
-    void generate(Originator const& o, c4::yml::NodeRef *root, CodeChunk *ch) const
+    void generate(Originator const& o, c4::yml::NodeRef root, CodeChunk *ch) const
     {
         if(m_empty) return;
         ch->m_generator = this;
-        ch->m_originator = o;
+        ch->m_originator = &o;
         create_prop_tree(o, root);
-        render(*root, ch);
+        render(root, ch);
     }
 
-    virtual void create_prop_tree(Originator const& o, c4::yml::NodeRef *root) const = 0;
+    virtual void create_prop_tree(Originator const& o, c4::yml::NodeRef root) const = 0;
 
-    void render(c4::yml::NodeRef & properties, CodeChunk *ch) const
+    void render(c4::yml::NodeRef const properties, CodeChunk *ch) const
     {
-        m_templates.m_hdr_preamble.render(properties, &ch->m_hdr_preamble);
-        m_templates.m_inl_preamble.render(properties, &ch->m_inl_preamble);
-        m_templates.m_src_preamble.render(properties, &ch->m_src_preamble);
-        m_templates.m_hdr.render(properties, &ch->m_hdr);
-        m_templates.m_inl.render(properties, &ch->m_inl);
-        m_templates.m_src.render(properties, &ch->m_src);
+        m_hdr_preamble.render(properties, &ch->m_hdr_preamble);
+        m_inl_preamble.render(properties, &ch->m_inl_preamble);
+        m_src_preamble.render(properties, &ch->m_src_preamble);
+        m_hdr.render(properties, &ch->m_hdr);
+        m_inl.render(properties, &ch->m_inl);
+        m_src.render(properties, &ch->m_src);
     }
 
-    void load_templates(c4::yml::NodeRef const& n)
+    void load_templates(c4::yml::NodeRef const n)
     {
-        m_empty = false;
-        m_empty |= m_templates.m_hdr_preamble.load(n, "hdr_preamble");
-        m_empty |= m_templates.m_inl_preamble.load(n, "inl_preamble");
-        m_empty |= m_templates.m_src_preamble.load(n, "src_preamble");
-        m_empty |= m_templates.m_hdr         .load(n, "hdr");
-        m_empty |= m_templates.m_inl         .load(n, "inl");
-        m_empty |= m_templates.m_src         .load(n, "src");
+        m_empty  = false;
+        m_empty |= m_hdr_preamble.load(n, "hdr_preamble");
+        m_empty |= m_inl_preamble.load(n, "inl_preamble");
+        m_empty |= m_src_preamble.load(n, "src_preamble");
+        m_empty |= m_hdr         .load(n, "hdr");
+        m_empty |= m_inl         .load(n, "inl");
+        m_empty |= m_src         .load(n, "src");
     }
 
 };
@@ -357,56 +316,74 @@ struct Generator
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-struct Enum : public Originator
-{
-    std::vector< EnumSymbol > m_symbols;
-};
-
-struct EnumGenerator : public Generator
-{
-    void create_prop_tree(Originator const& o, c4::yml::NodeRef *root) const override
-    {
-
-    }
-};
-
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-
-struct Class : public Originator
-{
-    std::vector< Member > m_members;
-};
-
-struct ClassGenerator : public Generator
-{
-    void create_prop_tree(Originator const& o, c4::yml::NodeRef *root) const override
-    {
-
-    }
-};
-
-
-
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-//-----------------------------------------------------------------------------
-
+/** a free-standing function */
 struct Function : public Originator
 {
-    DataType m_return_type;
+    DataType                       m_return_type;
     std::vector<FunctionParameter> m_parameters;
 };
 
+/** generate code from free standing functions */
 struct FunctionGenerator : public Generator
 {
-    void create_prop_tree(Originator const& o, c4::yml::NodeRef *root) const override
+    void create_prop_tree(Originator const& o, c4::yml::NodeRef root) const override
     {
         C4_NOT_IMPLEMENTED();
     }
 };
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
+struct Enum;
+struct EnumSymbol : public CodeEntity
+{
+    Enum    *m_enum;
+    csubstr  m_sym;
+    csubstr  m_val;
+};
+
+/** an enumeration type */
+struct Enum : public Originator
+{
+    std::vector<EnumSymbol> m_symbols;
+};
+
+struct EnumGenerator : public Generator
+{
+    void create_prop_tree(Originator const& o, c4::yml::NodeRef root) const override
+    {
+        C4_NOT_IMPLEMENTED();
+    }
+};
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
+struct Method : public Function
+{
+    Class *m_class;
+};
+
+struct Class : public Originator
+{
+    std::vector<Member> m_members;
+    std::vector<Method> m_methods;
+};
+
+struct ClassGenerator : public Generator
+{
+    void create_prop_tree(Originator const& o, c4::yml::NodeRef root) const override
+    {
+        C4_NOT_IMPLEMENTED();
+    }
+};
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -421,30 +398,6 @@ typedef enum {
 
 struct SourceFile : public CodeEntity
 {
-
-    template<class EntityT, class GeneratorT>
-    struct entity_collection
-    {
-        std::vector<EntityT> m_entities;
-
-        void gencode(SourceFile *sf, GeneratorT const& g)
-        {
-            c4::yml::Tree props;
-            c4::yml::NodeRef root = props.rootref();
-
-            size_t count = 0;
-            for(auto const& p : sf->m_pos)
-            {
-                if(p.entity_type == ENT_CLASS)
-                {
-                    g.generate(m_entities[p.pos], &root, &sf->m_chunks[count]);
-                }
-                ++count;
-            }
-        }
-
-    };
-
 public:
 
     bool m_is_header; ///< is this a header file?
@@ -452,19 +405,19 @@ public:
     // originator entities extracted from this source file. Given a
     // generator, these entities will originate the code chunks.
 
-    entity_collection< Enum, EnumGenerator > m_enums;
-    entity_collection< Class, ClassGenerator > m_classes;
-    entity_collection< Function, FunctionGenerator > m_functions;
+    std::vector<Enum>     m_enums;      ///< enum originator entities
+    std::vector<Class>    m_classes;    ///< class originator entities
+    std::vector<Function> m_functions;  ///< function originator entities
 
-    // make sure that the generated code chunks are in the
-    // same order as in the source file
+    /// make sure that the generated code chunks are in the
+    /// same order as given in the source file
     struct OriginatorPos
     {
         EntityType_e entity_type;
         size_t pos;
     };
-    std::vector< OriginatorPos > m_pos; ///< the map to the chunks array
-    std::vector< CodeChunk > m_chunks;  ///< the chunks from the originated source code
+    std::vector<OriginatorPos> m_pos;    ///< the map to the chunks array
+    std::vector<CodeChunk>     m_chunks; ///< the code chunks originated from the source code
 
 public:
 
@@ -475,29 +428,10 @@ public:
     void setup()
     {
         auto f = to_csubstr(m_file);
-        m_is_header = false;
-        std::initializer_list< csubstr > hdr_exts = {".h", ".hpp", ".hxx", ".h++", ".hh"};
-        for(auto &ext : hdr_exts)
-        {
-            if(f.ends_with(ext))
-            {
-                m_is_header = true;
-                break;
-            }
-        }
+        m_is_header = is_hdr(f);
         if( ! m_is_header)
         {
-            bool gotit = false;
-            std::initializer_list< csubstr > src_exts = {".c", ".cpp", ".cxx", ".c++", ".cc"};
-            for(auto &ext : src_exts)
-            {
-                if(f.ends_with(ext))
-                {
-                    gotit = true;
-                    break;
-                }
-            }
-            C4_ASSERT(gotit);
+            C4_ASSERT(is_src(f));
         }
     }
 
@@ -506,19 +440,34 @@ public:
 
     }
 
-    void gencode(ClassGenerator const& g)
+    void gencode(ClassGenerator const& g, c4::yml::NodeRef workspace)
     {
-        m_classes.gencode(this, g);
+        _gencode(m_classes, g, workspace);
     }
 
-    void gencode(EnumGenerator const& g)
+    void gencode(EnumGenerator const& g, c4::yml::NodeRef workspace)
     {
-        m_enums.gencode(this, g);
+        _gencode(m_enums, g, workspace);
     }
 
-    void gencode(FunctionGenerator const& g)
+    void gencode(FunctionGenerator const& g, c4::yml::NodeRef workspace)
     {
-        m_functions.gencode(this, g);
+        _gencode(m_functions, g, workspace);
+    }
+
+    template<class Entity>
+    void _gencode(std::vector<Entity> &entities, Generator const& g, c4::yml::NodeRef workspace)
+    {
+        C4_ASSERT(workspace.is_root());
+        size_t count = 0;
+        for(auto const& p : m_pos)
+        {
+            if(p.entity_type == ENT_CLASS)
+            {
+                g.generate(entities[p.pos], workspace, &m_chunks[count]);
+            }
+            ++count;
+        }
     }
 
 public:
@@ -542,9 +491,9 @@ public:
     {
         switch(p.entity_type)
         {
-        case ENT_ENUM:     return &m_enums    .m_entities[p.pos];
-        case ENT_CLASS:    return &m_classes  .m_entities[p.pos];
-        case ENT_FUNCTION: return &m_functions.m_entities[p.pos];
+        case ENT_ENUM:     return &m_enums    [p.pos];
+        case ENT_CLASS:    return &m_classes  [p.pos];
+        case ENT_FUNCTION: return &m_functions[p.pos];
         default:
             C4_ERROR("unknown entity type");
             break;
@@ -599,7 +548,11 @@ struct Writer
         return STDOUT;
     }
 
+public:
+
     Type_e m_type;
+
+public:
 
     Writer()
     {
@@ -612,31 +565,32 @@ struct Writer
         m_type = str2type(s);
     }
 
-    using set_type = std::set< std::string >;
+    using set_type = std::set<std::string>;
 
-    void write(SourceFile const& src) const
+    void write(SourceFile const& src, set_type *C4_RESTRICT output_names=nullptr, bool get_filenames_only=false) const
     {
-        set_type output_names;
+        C4_NOT_IMPLEMENTED();
+        switch(m_type)
+        {
+        case STDOUT:
+            break;
+        case SAMEFILE:
+            if(output_names) output_names->insert(src.m_file);
+            break;
+        case GENFILE:
+            break;
+        case GENGROUP:
+            break;
+        case SINGLEFILE:
+            break;
+        default:
+            C4_ERROR("unknown writer type");
+        }
     }
 
     void get_output_file_names(SourceFile const& src, set_type *output_names) const
     {
-        switch(m_type)
-        {
-        case STDOUT: break;
-        case SAMEFILE: output_names->insert(src.m_file); return;
-        case GENFILE: output_names->clear(); return;
-        case GENGROUP: output_names->clear(); return;
-        case SINGLEFILE: output_names->clear(); return;
-        }
-        C4_ERROR("unknown writer type");
-    }
-
-    set_type get_output_file_names(SourceFile const& src) const
-    {
-        set_type ofn;
-        get_output_file_names(src, &ofn);
-        return ofn;
+        write(src, output_names, /*get_filenames_only*/true);
     }
 
 };
@@ -648,16 +602,16 @@ struct Writer
 
 struct Regen
 {
-    std::string m_config_file_name;
-    std::string m_config_file_yml;
+    std::string   m_config_file_name;
+    std::string   m_config_file_yml;
     c4::yml::Tree m_config_data;
 
-    std::vector< EnumGenerator     > m_enum_gens;
-    std::vector< ClassGenerator    > m_class_gens;
-    std::vector< FunctionGenerator > m_function_gens;
-    std::vector< Generator*        > m_all_gens;
+    std::vector<EnumGenerator    > m_gens_enum;
+    std::vector<ClassGenerator   > m_gens_class;
+    std::vector<FunctionGenerator> m_gens_function;
+    std::vector<Generator*       > m_gens_all;
 
-    std::vector< SourceFile > m_files;
+    std::vector<SourceFile> m_files;
 
     Writer m_writer;
 
@@ -667,6 +621,8 @@ public:
     {
         load_config_file(config_file);
     }
+
+    bool empty() { return m_gens_all.empty(); }
 
     void load_config_file(const char* file_name)
     {
@@ -679,10 +635,10 @@ public:
 
         m_writer.load(r);
 
-        m_enum_gens.clear();
-        m_class_gens.clear();
-        m_function_gens.clear();
-        m_all_gens.clear();
+        m_gens_all.clear();
+        m_gens_enum.clear();
+        m_gens_class.clear();
+        m_gens_function.clear();
 
         n = r.find_child("generators");
         if( ! n.valid()) return;
@@ -691,15 +647,15 @@ public:
             csubstr gtype = ch["type"].val();
             if(gtype == "enum")
             {
-                _loadgen(ch, &m_enum_gens);
+                _loadgen(ch, &m_gens_enum);
             }
             else if(gtype == "class")
             {
-                _loadgen(ch, &m_class_gens);
+                _loadgen(ch, &m_gens_class);
             }
             else if(gtype == "function")
             {
-                _loadgen(ch, &m_function_gens);
+                _loadgen(ch, &m_gens_function);
             }
             else
             {
@@ -708,21 +664,37 @@ public:
         }
     }
 
+    template< class GeneratorT >
+    void _loadgen(c4::yml::NodeRef const& n, std::vector<GeneratorT> *gens)
+    {
+        gens->emplace_back();
+        GeneratorT &g = gens->back();
+        g.load(n);
+        m_gens_all.push_back(&g);
+    }
+
     void generate_code()
     {
+        c4::yml::Tree worktree;
         for(auto & sf : m_files)
         {
-            for(auto const& eg : m_enum_gens)
+            for(auto const& eg : m_gens_enum)
             {
-                sf.gencode(eg);
+                sf.gencode(eg, worktree.rootref());
             }
-            for(auto const& cg : m_class_gens)
+        }
+        for(auto & sf : m_files)
+        {
+            for(auto const& cg : m_gens_class)
             {
-                sf.gencode(cg);
+                sf.gencode(cg, worktree.rootref());
             }
-            for(auto const& fg : m_function_gens)
+        }
+        for(auto & sf : m_files)
+        {
+            for(auto const& fg : m_gens_function)
             {
-                sf.gencode(fg);
+                sf.gencode(fg, worktree.rootref());
             }
         }
     }
@@ -735,8 +707,6 @@ public:
         }
     }
 
-    bool empty() { return m_all_gens.empty(); }
-
     void print_output_file_names() const
     {
         Writer::set_type ofn;
@@ -744,15 +714,6 @@ public:
         {
             m_writer.get_output_file_names(sf, &ofn);
         }
-    }
-
-    template< class GeneratorT >
-    void _loadgen(c4::yml::NodeRef const& n, std::vector< GeneratorT > *gens)
-    {
-        gens->emplace_back();
-        auto &g = gens->back();
-        g.load(n);
-        m_all_gens.push_back(&g);
     }
 
 };

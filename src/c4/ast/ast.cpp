@@ -1,4 +1,5 @@
 #include "c4/ast/ast.hpp"
+#include "c4/std/string.hpp"
 
 namespace c4 {
 namespace ast {

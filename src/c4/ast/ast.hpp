@@ -19,8 +19,6 @@ namespace c4 {
 namespace ast {
 
 
-//-----------------------------------------------------------------------------
-
 template <class T>
 struct pimpl_handle
 {
@@ -189,7 +187,9 @@ struct Region
     LocData     m_end;
 
     Region(){}
-    Region(Index &idx, CXCursor c)
+    Region(Index &idx, CXCursor c) { init_region(idx, c); }
+
+    void init_region(Index &idx, CXCursor c)
     {
         CXSourceRange  ext = clang_getCursorExtent(c);
         CXSourceLocation s = clang_getRangeStart(ext);
@@ -198,6 +198,11 @@ struct Region
         clang_getExpansionLocation(s, &f, &m_start.line, &m_start.column, &m_start.offset);
         clang_getExpansionLocation(e, nullptr, &m_end.line, &m_end.column, &m_end.offset);
         m_file = idx.to_str(&clang_getFileName, f);
+    }
+
+    csubstr get_str(csubstr file_contents) const
+    {
+        return file_contents.range(m_start.offset, m_end.offset);
     }
 };
 
@@ -230,6 +235,14 @@ struct Cursor : public CXCursor
     CXType result_type() const { return clang_getCursorResultType(*this); }
     CXType named_type() const { return clang_Type_getNamedType(type()); }
 
+    bool is_declaration() const { return clang_isDeclaration(kind()) != 0; }
+    bool is_reference() const { return clang_isReference(kind()) != 0; }
+    bool is_expression() const { return clang_isExpression(kind()) != 0; }
+    bool is_statement() const { return clang_isStatement(kind()) != 0; }
+    bool is_preprocessing() const { return clang_isPreprocessing(kind()); }
+
+    bool has_attrs() const { return clang_Cursor_hasAttrs(*this); }
+
     // these utility functions are expensive because of the allocations.
     // They should be called once and the results should be stored.
     const char*  display_name(Index &idx) const { return idx.to_str(&clang_getCursorDisplayName, *this); }
@@ -238,14 +251,6 @@ struct Cursor : public CXCursor
     const char* kind_spelling(Index &idx) const { return idx.to_str(&clang_getCursorKindSpelling, kind()); }
     const char*   raw_comment(Index &idx) const { return idx.to_str(&clang_Cursor_getRawCommentText, *this); }
     const char* brief_comment(Index &idx) const { return idx.to_str(&clang_Cursor_getBriefCommentText, *this); }
-
-    bool is_declaration() const { return clang_isDeclaration(kind()) != 0; }
-    bool is_reference() const { return clang_isReference(kind()) != 0; }
-    bool is_expression() const { return clang_isExpression(kind()) != 0; }
-    bool is_statement() const { return clang_isStatement(kind()) != 0; }
-    bool is_preprocessing() const { return clang_isPreprocessing(kind()); }
-
-    bool has_attrs() const { return clang_Cursor_hasAttrs(*this); }
 };
 
 
@@ -286,7 +291,7 @@ struct _visitor_data
     CXTranslationUnit transunit;
 };
 
-CXChildVisitResult _visit_impl(CXCursor cursor, CXCursor parent, CXClientData data)
+inline CXChildVisitResult _visit_impl(CXCursor cursor, CXCursor parent, CXClientData data)
 {
     _visitor_data *C4_RESTRICT vd = reinterpret_cast<_visitor_data*>(data);
     if(vd->same_unit_only && (clang_Cursor_getTranslationUnit(cursor) != vd->transunit))

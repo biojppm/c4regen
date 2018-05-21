@@ -32,7 +32,7 @@ struct test_unit
 TEST(foo, bar)
 {
     test_unit tu(R"(#define C4_ENUM(...)
-C4_ENUM(a=b)
+C4_ENUM(a: b, c: [d, e, f], h: {i: j, k: "l"})
 using TestEnum_e = enum {
     FOO,
     BAR

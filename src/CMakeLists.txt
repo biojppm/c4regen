@@ -1,6 +1,7 @@
 set(src
     c4/ast/ast.hpp
     c4/ast/ast.cpp
+    c4/regen/exec.hpp
     c4/regen/regen.hpp
     c4/regen/regen.cpp
 )
