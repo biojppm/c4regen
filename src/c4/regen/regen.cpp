@@ -72,7 +72,7 @@ void Extractor::load(c4::yml::NodeRef n)
     }
 }
 
-size_t Extractor::extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Cursor> *out) const
+size_t Extractor::extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Entity> *out) const
 {
     switch(m_type)
     {
@@ -90,6 +90,8 @@ size_t Extractor::extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu,
         size_t ret = tu.select(matcher, out);
         // filter in the specified kind
         size_t curr = 0;
+        C4_NOT_IMPLEMENTED();
+        /*
         for(size_t i = 0; i < ret; ++i)
         {
             ast::Cursor c = (*out)[sz + i].next_sibling();
@@ -99,9 +101,11 @@ size_t Extractor::extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu,
                 ++curr;
             }
         }
+         */
         if(m_type == EXTR_TAGGED_MACRO_ANNOTATED)
         {
             // filter in only annotated occurrences
+            C4_NOT_IMPLEMENTED();
         }
         return curr;
     }

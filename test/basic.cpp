@@ -57,7 +57,7 @@ int main() { return 0; }
             }
             return CXChildVisit_Recurse;
         }, &tu);
-    std::vector<Cursor> ws;
+    std::vector<ast::Entity> ws;
 
     tu.unit.select_tagged("C4_ENUM", &ws);
     EXPECT_EQ(ws.size(), 1);

@@ -18,6 +18,33 @@
 namespace c4 {
 namespace ast {
 
+inline bool is_integral_unsigned(CXTypeKind t)
+{
+    return t == CXType_Char_U ||
+           t == CXType_UChar  ||
+           t == CXType_Char16 ||
+           t == CXType_Char32 ||
+           t == CXType_UShort ||
+           t == CXType_UInt   ||
+           t == CXType_ULong  ||
+           t == CXType_ULongLong ||
+           t == CXType_UInt128;
+}
+
+inline bool is_integral_signed(CXTypeKind t)
+{
+    return t == CXType_Char_S ||
+           t == CXType_SChar ||
+           t == CXType_WChar ||
+           t == CXType_Short ||
+           t == CXType_Int ||
+           t == CXType_Long ||
+           t == CXType_LongLong ||
+           t == CXType_Int128;
+}
+
+
+//-----------------------------------------------------------------------------
 
 template <class T>
 struct pimpl_handle
@@ -312,13 +339,24 @@ inline void visit_children(Cursor root, visitor_pfn visitor, void *data=nullptr,
 
 //-----------------------------------------------------------------------------
 
+struct Entity
+{
+    ast::Cursor  cursor;
+    ast::Cursor  parent;
+    ast::Index  *C4_RESTRICT idx;
+    csubstr      file_contents;
+};
+using EntityRef = Entity const& C4_RESTRICT;
+
+//-----------------------------------------------------------------------------
+
 namespace detail {
 
 struct SelectData
 {
     Index *C4_RESTRICT idx;
     CursorMatcher *C4_RESTRICT matcher;
-    std::vector<Cursor> *C4_RESTRICT out;
+    std::vector<ast::Entity> *C4_RESTRICT out;
 };
 
 inline CXChildVisitResult _select_impl(Cursor c, Cursor parent, void *data_)
@@ -326,14 +364,19 @@ inline CXChildVisitResult _select_impl(Cursor c, Cursor parent, void *data_)
     auto *C4_RESTRICT data = reinterpret_cast<SelectData *C4_RESTRICT>(data_);
     if((*data->matcher)(*data->idx, c))
     {
-        data->out->push_back(c);
+        data->out->emplace_back();
+        auto &C4_RESTRICT b = data->out->back();
+        b.cursor = c;
+        b.parent = parent;
+        b.idx = data->idx;
+        b.file_contents.clear();
     }
     return CXChildVisit_Recurse;
-};
+}
 
 } // namespace detail
 
-inline size_t select(Index &idx, Cursor root, CursorMatcher m, std::vector<Cursor> *out, bool same_unit_only)
+inline size_t select(Index &idx, Cursor root, CursorMatcher m, std::vector<ast::Entity> *out, bool same_unit_only)
 {
     detail::SelectData data{&idx, &m, out};
     size_t sz = out->size();
@@ -483,12 +526,12 @@ public:
 
 public:
 
-    size_t select(CursorMatcher m, std::vector<Cursor> *v, bool same_unit_only=true) const
+    size_t select(CursorMatcher m, std::vector<Entity> *v, bool same_unit_only=true) const
     {
         return c4::ast::select(*m_index, root(), m, v, same_unit_only);
     }
 
-    size_t select_tagged(csubstr tag, std::vector<Cursor> *v, bool same_unit_only=true) const
+    size_t select_tagged(csubstr tag, std::vector<Entity> *v, bool same_unit_only=true) const
     {
         CursorMatcher matcher;
         matcher.kind = CXCursor_MacroExpansion;

@@ -42,17 +42,9 @@ void add_src(const char* ext);
 //-----------------------------------------------------------------------------
 struct Tag;
 
+using astEntityRef = ast::EntityRef;
 
-struct astEntity
-{
-    csubstr      file_contents;
-    ast::Index  *idx;
-    ast::Cursor  cursor;
-    ast::Cursor  parent;
-    Tag         *tag;
-};
-
-struct CodeEntity : public ast::Region
+struct Entity : public ast::Region
 {
     ast::Index const *m_index{nullptr};
     ast::Cursor       m_cursor;
@@ -60,15 +52,16 @@ struct CodeEntity : public ast::Region
     csubstr           m_str;
     Tag        const *m_tag{nullptr};
 
-    void init_entity(astEntity const& C4_RESTRICT e)
+    virtual void init(astEntityRef e)
     {
         init_region(*e.idx, e.cursor);
         m_index = e.idx;
         m_cursor = e.cursor;
         m_parent = e.parent;
         m_str = get_str(e.file_contents);
-        m_tag = e.tag;
     }
+
+    void set_tag(Tag const* t) { m_tag = t; }
 
 };
 
@@ -83,50 +76,40 @@ struct CodeEntity : public ast::Region
  *@endcode
  *
  */
-struct Tag : public CodeEntity
+struct Tag : public Entity
 {
     csubstr m_name;
     csubstr m_spec_str;
     c4::yml::Tree m_annotations;
 
-    void init_tag(astEntity const& C4_RESTRICT e)
+    void init(astEntityRef e) override final
     {
-        this->init_entity(e);
+        this->Entity::init(e);
         parse_annotations();
     }
 
     void parse_annotations()
     {
-        m_annotations.clear();
-        bool started = false;
-        bool keyval = false;
         csubstr s = find_pair(m_str, '(', ')', /*allow_nested*/true);
         C4_ASSERT(s.len >= 2 && s.begins_with('(') && s.ends_with(')'));
-        m_spec_str = s.range(1, s.len-1);
-        for(size_t i = 0; i < m_spec_str.len; ++i)
-        {
-            auto c = m_spec_str[i];
-            if( ! started)
-            {
-                if(is_idchar(c))
-                {
-                    started = true;
-                }
-            }
-            else
-            {
-
-            }
-        }
-
+        m_spec_str = s.range(1, s.len-1).trim(' ');
+        m_annotations.clear();
+        m_annotations.clear_arena();
+        if(m_spec_str.empty()) return;
+        substr yml_src = m_annotations.copy_to_arena(m_spec_str);
+        c4::yml::parse(yml_src, &m_annotations);
     }
 };
 
-struct DataType : public CodeEntity
+struct DataType : public Entity
 {
+    csubstr m_type_name;
+    CXType m_cxtype;
+    bool is_integral_signed()   const { return ast::is_integral_signed(m_cxtype.kind); }
+    bool is_integral_unsigned() const { return ast::is_integral_unsigned(m_cxtype.kind); }
 };
 
-struct Var : public CodeEntity
+struct Var : public Entity
 {
     csubstr  m_name;
     DataType m_type;
@@ -139,16 +122,10 @@ struct Member : public Var
 };
 
 struct Function;
-struct FunctionParameter : public CodeEntity
+struct FunctionParameter : public Entity
 {
     Function *m_function;
     DataType  m_data_type;
-};
-
-/** an entity which will originate code; ie, cause code to be generated */
-struct Originator : public CodeEntity
-{
-
 };
 
 
@@ -192,7 +169,7 @@ struct Extractor
     std::string m_attr;
 
     void load(c4::yml::NodeRef n);
-    size_t extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Cursor> *out) const;
+    size_t extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Entity> *out) const;
     bool must_extract(c4::ast::Index &idx, c4::ast::Cursor c) const;
 };
 
@@ -245,7 +222,7 @@ struct CodeInstances
 struct CodeChunk : public CodeInstances<c4::tpl::Rope>
 {
     Generator const* m_generator;
-    CodeEntity const* m_originator;
+    Entity const* m_originator;
 };
 
 
@@ -277,7 +254,7 @@ struct Generator : public CodeInstances<CodeTemplate>
         load_templates(n);
     }
 
-    void generate(Originator const& o, c4::yml::NodeRef root, CodeChunk *ch) const
+    void generate(Entity const& o, c4::yml::NodeRef root, CodeChunk *ch) const
     {
         if(m_empty) return;
         ch->m_generator = this;
@@ -286,7 +263,7 @@ struct Generator : public CodeInstances<CodeTemplate>
         render(root, ch);
     }
 
-    virtual void create_prop_tree(Originator const& o, c4::yml::NodeRef root) const = 0;
+    virtual void create_prop_tree(Entity const& o, c4::yml::NodeRef root) const = 0;
 
     void render(c4::yml::NodeRef const properties, CodeChunk *ch) const
     {
@@ -317,7 +294,7 @@ struct Generator : public CodeInstances<CodeTemplate>
 //-----------------------------------------------------------------------------
 
 /** a free-standing function */
-struct Function : public Originator
+struct Function : public Entity
 {
     DataType                       m_return_type;
     std::vector<FunctionParameter> m_parameters;
@@ -326,7 +303,7 @@ struct Function : public Originator
 /** generate code from free standing functions */
 struct FunctionGenerator : public Generator
 {
-    void create_prop_tree(Originator const& o, c4::yml::NodeRef root) const override
+    void create_prop_tree(Entity const& o, c4::yml::NodeRef root) const override
     {
         C4_NOT_IMPLEMENTED();
     }
@@ -338,26 +315,52 @@ struct FunctionGenerator : public Generator
 //-----------------------------------------------------------------------------
 
 struct Enum;
-struct EnumSymbol : public CodeEntity
+struct EnumSymbol : public Entity
 {
     Enum    *m_enum;
     csubstr  m_sym;
     csubstr  m_val;
+    char     m_val_buf[32];
+
+    void init_symbol(astEntityRef r, Enum *e);
+
 };
 
 /** an enumeration type */
-struct Enum : public Originator
+struct Enum : public DataType
 {
     std::vector<EnumSymbol> m_symbols;
+    DataType m_underlying_type;
+
+    virtual void init(astEntityRef e) override
+    {
+        this->DataType::init(e);
+        m_underlying_type.m_cxtype = clang_getEnumDeclIntegerType(m_cursor);
+    }
 };
 
 struct EnumGenerator : public Generator
 {
-    void create_prop_tree(Originator const& o, c4::yml::NodeRef root) const override
+    void create_prop_tree(Entity const& o, c4::yml::NodeRef root) const override
     {
         C4_NOT_IMPLEMENTED();
     }
 };
+
+
+inline void EnumSymbol::init_symbol(astEntityRef r, Enum *e)
+{
+    this->Entity::init(r);
+    m_enum = e;
+    if(e->m_underlying_type.is_integral_signed())
+    {
+        long long val = clang_getEnumConstantDeclValue(m_cursor);
+    }
+    else if(e->m_underlying_type.is_integral_unsigned())
+    {
+        unsigned long long val = clang_getEnumConstantDeclUnsignedValue(m_cursor);
+    }
+}
 
 
 //-----------------------------------------------------------------------------
@@ -369,7 +372,7 @@ struct Method : public Function
     Class *m_class;
 };
 
-struct Class : public Originator
+struct Class : public Entity
 {
     std::vector<Member> m_members;
     std::vector<Method> m_methods;
@@ -377,7 +380,7 @@ struct Class : public Originator
 
 struct ClassGenerator : public Generator
 {
-    void create_prop_tree(Originator const& o, c4::yml::NodeRef root) const override
+    void create_prop_tree(Entity const& o, c4::yml::NodeRef root) const override
     {
         C4_NOT_IMPLEMENTED();
     }
@@ -396,11 +399,9 @@ typedef enum {
     ENT_FUNCTION
 } EntityType_e;
 
-struct SourceFile : public CodeEntity
+struct SourceFile : public Entity
 {
 public:
-
-    bool m_is_header; ///< is this a header file?
 
     // originator entities extracted from this source file. Given a
     // generator, these entities will originate the code chunks.
@@ -411,13 +412,13 @@ public:
 
     /// make sure that the generated code chunks are in the
     /// same order as given in the source file
-    struct OriginatorPos
+    struct EntityPos
     {
         EntityType_e entity_type;
         size_t pos;
     };
-    std::vector<OriginatorPos> m_pos;    ///< the map to the chunks array
-    std::vector<CodeChunk>     m_chunks; ///< the code chunks originated from the source code
+    std::vector<EntityPos> m_pos;    ///< the map to the chunks array
+    std::vector<CodeChunk> m_chunks; ///< the code chunks originated from the source code
 
 public:
 
@@ -425,44 +426,34 @@ public:
     {
     }
 
-    void setup()
-    {
-        auto f = to_csubstr(m_file);
-        m_is_header = is_hdr(f);
-        if( ! m_is_header)
-        {
-            C4_ASSERT(is_src(f));
-        }
-    }
-
-    void prepare_extraction(Generator const* beg, Generator const* end)
+    void extract(ClassGenerator const& g)
     {
 
     }
 
     void gencode(ClassGenerator const& g, c4::yml::NodeRef workspace)
     {
-        _gencode(m_classes, g, workspace);
+        _gencode(m_classes, ENT_CLASS, g, workspace);
     }
 
     void gencode(EnumGenerator const& g, c4::yml::NodeRef workspace)
     {
-        _gencode(m_enums, g, workspace);
+        _gencode(m_enums, ENT_ENUM, g, workspace);
     }
 
     void gencode(FunctionGenerator const& g, c4::yml::NodeRef workspace)
     {
-        _gencode(m_functions, g, workspace);
+        _gencode(m_functions, ENT_FUNCTION, g, workspace);
     }
 
     template<class Entity>
-    void _gencode(std::vector<Entity> &entities, Generator const& g, c4::yml::NodeRef workspace)
+    void _gencode(std::vector<Entity> &entities, EntityType_e type, Generator const& g, c4::yml::NodeRef workspace)
     {
         C4_ASSERT(workspace.is_root());
         size_t count = 0;
         for(auto const& p : m_pos)
         {
-            if(p.entity_type == ENT_CLASS)
+            if(p.entity_type == type)
             {
                 g.generate(entities[p.pos], workspace, &m_chunks[count]);
             }
@@ -478,7 +469,7 @@ public:
         SourceFile const* s;
         size_t pos;
 
-        using value_type = Originator const;
+        using value_type = Entity const;
 
         value_type& operator*  () const { C4_ASSERT(pos >= 0 && pos < s->m_pos.size()); return *s->resolve(s->m_pos[pos]); }
         value_type* operator-> () const { C4_ASSERT(pos >= 0 && pos < s->m_pos.size()); return  s->resolve(s->m_pos[pos]); }
@@ -487,7 +478,7 @@ public:
     const_iterator begin() const { return const_iterator(this, 0); }
     const_iterator end  () const { return const_iterator(this, m_pos.size()); }
 
-    Originator const* resolve(OriginatorPos const& p) const
+    Entity const* resolve(EntityPos const& p) const
     {
         switch(p.entity_type)
         {
@@ -619,12 +610,65 @@ public:
 
     Regen(const char* config_file)
     {
-        load_config_file(config_file);
+        _load_config_file(config_file);
     }
 
     bool empty() { return m_gens_all.empty(); }
 
-    void load_config_file(const char* file_name)
+    void gencode()
+    {
+        for(auto & sf : m_files)
+        {
+            for(auto *g : m_gens_all)
+            {
+                //sf.prepare_extraction(g);
+            }
+        }
+
+        c4::yml::Tree worktree;
+        for(auto & sf : m_files)
+        {
+            for(auto const& eg : m_gens_enum)
+            {
+                sf.gencode(eg, worktree.rootref());
+            }
+        }
+        for(auto & sf : m_files)
+        {
+            for(auto const& cg : m_gens_class)
+            {
+                sf.gencode(cg, worktree.rootref());
+            }
+        }
+        for(auto & sf : m_files)
+        {
+            for(auto const& fg : m_gens_function)
+            {
+                sf.gencode(fg, worktree.rootref());
+            }
+        }
+    }
+
+    void output_code() const
+    {
+        for(auto const& sf : m_files)
+        {
+            m_writer.write(sf);
+        }
+    }
+
+    void print_output_file_names() const
+    {
+        Writer::set_type ofn;
+        for(auto const& sf : m_files)
+        {
+            m_writer.get_output_file_names(sf, &ofn);
+        }
+    }
+
+private:
+
+    void _load_config_file(const char* file_name)
     {
         // read the yml config and parse it
         m_config_file_name = file_name;
@@ -672,50 +716,6 @@ public:
         g.load(n);
         m_gens_all.push_back(&g);
     }
-
-    void generate_code()
-    {
-        c4::yml::Tree worktree;
-        for(auto & sf : m_files)
-        {
-            for(auto const& eg : m_gens_enum)
-            {
-                sf.gencode(eg, worktree.rootref());
-            }
-        }
-        for(auto & sf : m_files)
-        {
-            for(auto const& cg : m_gens_class)
-            {
-                sf.gencode(cg, worktree.rootref());
-            }
-        }
-        for(auto & sf : m_files)
-        {
-            for(auto const& fg : m_gens_function)
-            {
-                sf.gencode(fg, worktree.rootref());
-            }
-        }
-    }
-
-    void output_code() const
-    {
-        for(auto const& sf : m_files)
-        {
-            m_writer.write(sf);
-        }
-    }
-
-    void print_output_file_names() const
-    {
-        Writer::set_type ofn;
-        for(auto const& sf : m_files)
-        {
-            m_writer.get_output_file_names(sf, &ofn);
-        }
-    }
-
 };
 
 } // namespace regen
