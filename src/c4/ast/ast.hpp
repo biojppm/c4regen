@@ -245,10 +245,6 @@ struct Cursor : public CXCursor
 
     Cursor semantic_parent() const { return Cursor(clang_getCursorSemanticParent(*this)); }
     Cursor lexical_parent() const { return Cursor(clang_getCursorLexicalParent(*this)); }
-    Cursor next_sibling() const
-    {
-        return clang_getNullCursor();
-    }
 
     Location location(Index &idx) const { return Location(idx, *this); }
     Region region(Index &idx) const { return Region(idx, *this); }
@@ -278,6 +274,9 @@ struct Cursor : public CXCursor
     const char* kind_spelling(Index &idx) const { return idx.to_str(&clang_getCursorKindSpelling, kind()); }
     const char*   raw_comment(Index &idx) const { return idx.to_str(&clang_Cursor_getRawCommentText, *this); }
     const char* brief_comment(Index &idx) const { return idx.to_str(&clang_Cursor_getBriefCommentText, *this); }
+
+    Cursor prev_sibling() const { C4_NOT_IMPLEMENTED(); return clang_getNullCursor(); }
+    Cursor next_sibling() const { C4_NOT_IMPLEMENTED(); return clang_getNullCursor(); }
 };
 
 
@@ -321,7 +320,8 @@ struct _visitor_data
 inline CXChildVisitResult _visit_impl(CXCursor cursor, CXCursor parent, CXClientData data)
 {
     _visitor_data *C4_RESTRICT vd = reinterpret_cast<_visitor_data*>(data);
-    if(vd->same_unit_only && (clang_Cursor_getTranslationUnit(cursor) != vd->transunit))
+    if((vd->same_unit_only && (clang_Cursor_getTranslationUnit(cursor) != vd->transunit))
+            || clang_Cursor_isMacroBuiltin(cursor))
     {
         return CXChildVisit_Continue;
     }
@@ -336,53 +336,6 @@ inline void visit_children(Cursor root, visitor_pfn visitor, void *data=nullptr,
     clang_visitChildren(root, &detail::_visit_impl, &vd);
 }
 
-
-//-----------------------------------------------------------------------------
-
-struct Entity
-{
-    ast::Cursor  cursor;
-    ast::Cursor  parent;
-    ast::Index  *C4_RESTRICT idx;
-    csubstr      file_contents;
-};
-using EntityRef = Entity const& C4_RESTRICT;
-
-//-----------------------------------------------------------------------------
-
-namespace detail {
-
-struct SelectData
-{
-    Index *C4_RESTRICT idx;
-    CursorMatcher *C4_RESTRICT matcher;
-    std::vector<ast::Entity> *C4_RESTRICT out;
-};
-
-inline CXChildVisitResult _select_impl(Cursor c, Cursor parent, void *data_)
-{
-    auto *C4_RESTRICT data = reinterpret_cast<SelectData *C4_RESTRICT>(data_);
-    if((*data->matcher)(*data->idx, c))
-    {
-        data->out->emplace_back();
-        auto &C4_RESTRICT b = data->out->back();
-        b.cursor = c;
-        b.parent = parent;
-        b.idx = data->idx;
-        b.file_contents.clear();
-    }
-    return CXChildVisit_Recurse;
-}
-
-} // namespace detail
-
-inline size_t select(Index &idx, Cursor root, CursorMatcher m, std::vector<ast::Entity> *out, bool same_unit_only)
-{
-    detail::SelectData data{&idx, &m, out};
-    size_t sz = out->size();
-    visit_children(root, &detail::_select_impl, &data, same_unit_only);
-    return out->size() - sz;
-}
 
 
 //-----------------------------------------------------------------------------
@@ -429,6 +382,12 @@ struct CursorTokens
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
+struct TranslationUnit;
+struct Entity;
+
+size_t select(TranslationUnit &tu, Cursor root, CursorMatcher m, std::vector<ast::Entity> *out, bool same_unit_only);
+size_t select(Index &idx         , Cursor root, CursorMatcher m, std::vector<ast::Entity> *out, bool same_unit_only);
+
 
 constexpr const unsigned default_options = CXTranslationUnit_DetailedPreprocessingRecord;
 
@@ -436,6 +395,7 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
 {
     using pimpl_handle< CXTranslationUnit >::pimpl_handle;
     Index *m_index;
+    std::vector<char> m_contents;
 
     ~TranslationUnit()
     {
@@ -449,7 +409,8 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
     TranslationUnit(Index &idx, csubstr src, const char * const* cmds, size_t cmds_sz, unsigned options=default_options, bool delete_tmp=true)
     {
         m_index = &idx;
-        auto tmp = c4::fs::ScopedTmpFile(src.str, src.len, "c4regen-trans_unit.tmp-XXXXXXXX.cpp");
+        m_contents.assign(src.begin(), src.end());
+        auto tmp = c4::fs::ScopedTmpFile(src.str, src.len, "c4regen.tmp-XXXXXXXX.cpp");
         tmp.do_delete(delete_tmp);
         this->_parse2(idx, tmp.m_name, cmds, cmds_sz, options);
     }
@@ -457,12 +418,14 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
     TranslationUnit(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=default_options)
     {
         m_index = &idx;
+        c4::fs::file_get_contents(filename, &m_contents);
         this->_parse_argv(idx, filename, cmds, cmds_sz, options);
     }
 
     TranslationUnit(Index &idx, const char *filename, CompilationDb const& db, unsigned options=default_options)
     {
         m_index = &idx;
+        c4::fs::file_get_contents(filename, &m_contents);
         auto const& cmd = db.get_cmd(filename);
         C4_CHECK(cmd.size() > 1);
         this->_parse_argv(idx, nullptr, cmd.data(), cmd.size(), options);
@@ -539,6 +502,63 @@ public:
         return select(matcher, v, same_unit_only);
     }
 };
+
+
+//-----------------------------------------------------------------------------
+
+struct Entity
+{
+    Cursor  cursor;
+    Cursor  parent;
+    TranslationUnit const* C4_RESTRICT tu;
+    Index *C4_RESTRICT idx;
+};
+using EntityRef = Entity const& C4_RESTRICT;
+
+//-----------------------------------------------------------------------------
+
+namespace detail {
+
+struct SelectData
+{
+    TranslationUnit *C4_RESTRICT tu;
+    Index *C4_RESTRICT idx;
+    CursorMatcher *C4_RESTRICT matcher;
+    std::vector<ast::Entity> *C4_RESTRICT out;
+};
+
+inline CXChildVisitResult _select_impl(Cursor c, Cursor parent, void *data_)
+{
+    auto *C4_RESTRICT data = reinterpret_cast<SelectData *C4_RESTRICT>(data_);
+    if((*data->matcher)(*data->idx, c))
+    {
+        data->out->emplace_back();
+        auto &C4_RESTRICT b = data->out->back();
+        b.cursor = c;
+        b.parent = parent;
+        b.tu = data->tu;
+        b.idx = data->idx;
+    }
+    return CXChildVisit_Recurse;
+}
+
+} // namespace detail
+
+inline size_t select(TranslationUnit &tu, Cursor root, CursorMatcher m, std::vector<ast::Entity> *out, bool same_unit_only)
+{
+    detail::SelectData data{&tu, tu.m_index, &m, out};
+    size_t sz = out->size();
+    visit_children(root, &detail::_select_impl, &data, same_unit_only);
+    return out->size() - sz;
+}
+
+inline size_t select(Index &idx, Cursor root, CursorMatcher m, std::vector<ast::Entity> *out, bool same_unit_only)
+{
+    detail::SelectData data{nullptr, &idx, &m, out};
+    size_t sz = out->size();
+    visit_children(root, &detail::_select_impl, &data, same_unit_only);
+    return out->size() - sz;
+}
 
 
 } // namespace ast

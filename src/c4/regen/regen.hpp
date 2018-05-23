@@ -44,24 +44,30 @@ struct Tag;
 
 using astEntityRef = ast::EntityRef;
 
-struct Entity : public ast::Region
+
+struct Entity
 {
-    ast::Index const *m_index{nullptr};
+    ast::TranslationUnit const *C4_RESTRICT m_tu{nullptr};
+    ast::Index                 *C4_RESTRICT m_index{nullptr};
     ast::Cursor       m_cursor;
     ast::Cursor       m_parent;
+    ast::Region       m_region;
     csubstr           m_str;
-    Tag        const *m_tag{nullptr};
 
     virtual void init(astEntityRef e)
     {
-        init_region(*e.idx, e.cursor);
+        m_tu = e.tu;
         m_index = e.idx;
         m_cursor = e.cursor;
         m_parent = e.parent;
-        m_str = get_str(e.file_contents);
+        m_region.init_region(*e.idx, e.cursor);
+        m_str = m_region.get_str(to_csubstr(e.tu->m_contents));
     }
 
-    void set_tag(Tag const* t) { m_tag = t; }
+protected:
+
+    csubstr _get_display_name() const { return to_csubstr(m_cursor.display_name(*m_index)); }
+    csubstr _get_spelling() const { return to_csubstr(m_cursor.spelling(*m_index)); }
 
 };
 
@@ -82,6 +88,8 @@ struct Tag : public Entity
     csubstr m_spec_str;
     c4::yml::Tree m_annotations;
 
+    bool empty() const { return m_name.empty(); }
+
     void init(astEntityRef e) override final
     {
         this->Entity::init(e);
@@ -101,31 +109,45 @@ struct Tag : public Entity
     }
 };
 
+
+
 struct DataType : public Entity
 {
     csubstr m_type_name;
     CXType m_cxtype;
+
+    virtual void init(astEntityRef e) override
+    {
+        this->Entity::init(e);
+    }
+
     bool is_integral_signed()   const { return ast::is_integral_signed(m_cxtype.kind); }
     bool is_integral_unsigned() const { return ast::is_integral_unsigned(m_cxtype.kind); }
 };
 
-struct Var : public Entity
+
+struct TaggedEntity : public Entity
+{
+    Tag m_tag;
+
+    bool is_tagged() const { return ! m_tag.empty(); }
+    void set_tag(ast::Cursor tag, ast::Cursor tag_parent)
+    {
+        ast::Entity e{tag, tag_parent, m_tu, m_index};
+        m_tag.init(e);
+    }
+};
+
+
+struct Var : public TaggedEntity
 {
     csubstr  m_name;
     DataType m_type;
-};
 
-struct Class;
-struct Member : public Var
-{
-    Class *m_class;
-};
-
-struct Function;
-struct FunctionParameter : public Entity
-{
-    Function *m_function;
-    DataType  m_data_type;
+    virtual void init(astEntityRef e) override
+    {
+        this->TaggedEntity::init(e);
+    }
 };
 
 
@@ -170,7 +192,7 @@ struct Extractor
 
     void load(c4::yml::NodeRef n);
     size_t extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Entity> *out) const;
-    bool must_extract(c4::ast::Index &idx, c4::ast::Cursor c) const;
+    bool extract(c4::ast::Index &idx, c4::ast::Cursor c, c4::ast::Cursor *extracted) const;
 };
 
 
@@ -293,11 +315,42 @@ struct Generator : public CodeInstances<CodeTemplate>
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-/** a free-standing function */
-struct Function : public Entity
+struct Function;
+struct FunctionParameter : public Entity
 {
-    DataType                       m_return_type;
+    Function const* C4_RESTRICT m_function{nullptr};
+    csubstr  m_name;
+    DataType m_data_type;
+
+    void init_param(astEntityRef e, Function const *C4_RESTRICT f)
+    {
+        m_function = f;
+        this->Entity::init(e);
+        m_name = _get_display_name();
+    }
+};
+
+/** a free-standing function */
+struct Function : public TaggedEntity
+{
+    csubstr m_name;
+    DataType m_return_type;
     std::vector<FunctionParameter> m_parameters;
+
+    virtual void init(astEntityRef e) override
+    {
+        this->TaggedEntity::init(e);
+        m_name = _get_display_name();
+        int num_args = clang_Cursor_getNumArguments(m_cursor);
+        m_parameters.resize(num_args);
+        unsigned i = 0;
+        for(auto &a : m_parameters)
+        {
+            ast::Cursor pc = clang_Cursor_getArgument(m_cursor, i++);
+            ast::Entity pe{pc, m_cursor, m_tu, m_index};
+            a.init_param(pe, this);
+        }
+    }
 };
 
 /** generate code from free standing functions */
@@ -315,7 +368,7 @@ struct FunctionGenerator : public Generator
 //-----------------------------------------------------------------------------
 
 struct Enum;
-struct EnumSymbol : public Entity
+struct EnumSymbol : public TaggedEntity
 {
     Enum    *m_enum;
     csubstr  m_sym;
@@ -327,14 +380,16 @@ struct EnumSymbol : public Entity
 };
 
 /** an enumeration type */
-struct Enum : public DataType
+struct Enum : public TaggedEntity
 {
+    csubstr m_name;
     std::vector<EnumSymbol> m_symbols;
     DataType m_underlying_type;
 
     virtual void init(astEntityRef e) override
     {
-        this->DataType::init(e);
+        this->TaggedEntity::init(e);
+        m_name = _get_display_name();
         m_underlying_type.m_cxtype = clang_getEnumDeclIntegerType(m_cursor);
     }
 };
@@ -367,13 +422,20 @@ inline void EnumSymbol::init_symbol(astEntityRef r, Enum *e)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
+struct Class;
+struct Member : public TaggedEntity
+{
+    Class *m_class;
+};
+
 struct Method : public Function
 {
     Class *m_class;
 };
 
-struct Class : public Entity
+struct Class : public TaggedEntity
 {
+    csubstr m_name;
     std::vector<Member> m_members;
     std::vector<Method> m_methods;
 };
@@ -410,10 +472,11 @@ public:
     std::vector<Class>    m_classes;    ///< class originator entities
     std::vector<Function> m_functions;  ///< function originator entities
 
-    /// make sure that the generated code chunks are in the
+    /// this is used to make sure that the generated code chunks are in the
     /// same order as given in the source file
     struct EntityPos
     {
+        Generator const *generator;
         EntityType_e entity_type;
         size_t pos;
     };
@@ -422,38 +485,51 @@ public:
 
 public:
 
-    SourceFile()
+    void extract(ClassGenerator    const& g) { _extract(m_classes  , ENT_CLASS   , g); }
+    void extract(EnumGenerator     const& g) { _extract(m_enums    , ENT_ENUM    , g); }
+    void extract(FunctionGenerator const& g) { _extract(m_functions, ENT_FUNCTION, g); }
+
+    void gencode(ClassGenerator    const& g, c4::yml::NodeRef workspace) { _gencode(m_classes  , ENT_CLASS   , g, workspace); }
+    void gencode(EnumGenerator     const& g, c4::yml::NodeRef workspace) { _gencode(m_enums    , ENT_ENUM    , g, workspace); }
+    void gencode(FunctionGenerator const& g, c4::yml::NodeRef workspace) { _gencode(m_functions, ENT_FUNCTION, g, workspace); }
+
+private:
+
+    template<class EntityT>
+    void _extract(std::vector<EntityT> &entities, EntityType_e type, Generator const& g)
     {
+        struct _visitor_data
+        {
+            SourceFile *sf;
+            std::vector<EntityT> *entities;
+            EntityType_e type;
+            Generator const* gen;
+        } vd{this, &entities, type, &g};
+        auto visitor = [](ast::Cursor c, ast::Cursor parent, void *data)
+        {
+            auto vd = (_visitor_data *C4_RESTRICT)data;
+            ast::Cursor target;
+            if(vd->gen->m_extractor.extract(*vd->sf->m_index, c, &target))
+            {
+                EntityPos pos{vd->gen, vd->type, vd->entities->size()};
+                vd->sf->m_pos.emplace_back(pos);
+                vd->sf->m_chunks.emplace_back();
+                vd->entities->emplace_back();
+                C4_NOT_IMPLEMENTED();
+            }
+            return CXChildVisit_Recurse;
+        };
+        m_tu->visit_children(visitor, &vd);
     }
 
-    void extract(ClassGenerator const& g)
-    {
-
-    }
-
-    void gencode(ClassGenerator const& g, c4::yml::NodeRef workspace)
-    {
-        _gencode(m_classes, ENT_CLASS, g, workspace);
-    }
-
-    void gencode(EnumGenerator const& g, c4::yml::NodeRef workspace)
-    {
-        _gencode(m_enums, ENT_ENUM, g, workspace);
-    }
-
-    void gencode(FunctionGenerator const& g, c4::yml::NodeRef workspace)
-    {
-        _gencode(m_functions, ENT_FUNCTION, g, workspace);
-    }
-
-    template<class Entity>
-    void _gencode(std::vector<Entity> &entities, EntityType_e type, Generator const& g, c4::yml::NodeRef workspace)
+    template<class EntityT>
+    void _gencode(std::vector<EntityT> &entities, EntityType_e type, Generator const& g, c4::yml::NodeRef workspace)
     {
         C4_ASSERT(workspace.is_root());
         size_t count = 0;
         for(auto const& p : m_pos)
         {
-            if(p.entity_type == type)
+            if(p.generator == &g && p.entity_type == type)
             {
                 g.generate(entities[p.pos], workspace, &m_chunks[count]);
             }
@@ -566,7 +642,7 @@ public:
         case STDOUT:
             break;
         case SAMEFILE:
-            if(output_names) output_names->insert(src.m_file);
+            if(output_names) output_names->insert(src.m_region.m_file);
             break;
         case GENFILE:
             break;

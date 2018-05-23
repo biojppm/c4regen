@@ -115,7 +115,7 @@ size_t Extractor::extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu,
     return false;
 }
 
-bool Extractor::must_extract(c4::ast::Index &idx, c4::ast::Cursor c) const
+bool Extractor::extract(c4::ast::Index &idx, c4::ast::Cursor c, c4::ast::Cursor *extracted) const
 {
     switch(m_type)
     {
@@ -126,19 +126,12 @@ bool Extractor::must_extract(c4::ast::Index &idx, c4::ast::Cursor c) const
         {
             if(c.display_name(idx) == m_tag)
             {
+                *extracted = c.next_sibling();
                 return true;
             }
         }
         return false;
     case EXTR_TAGGED_MACRO_ANNOTATED:
-        if(c.kind() == CXCursor_MacroExpansion)
-        {
-            if(c.display_name(idx) == m_tag)
-            {
-                return true;
-            }
-        }
-        break;
     default:
         C4_NOT_IMPLEMENTED();
     }

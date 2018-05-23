@@ -32,12 +32,12 @@ struct test_unit
 TEST(foo, bar)
 {
     test_unit tu(R"(#define C4_ENUM(...)
-C4_ENUM(a: b, c: [d, e, f], h: {i: j, k: "l"})
+C4_ENUM(x, y, z, a: b, c: [d, e, f], h: {i: j, k: 'l'})
 using TestEnum_e = enum {
     FOO,
     BAR
 };
-int main() { return 0; }
+int main(int argc, char *argv[]) { return 0; }
 )");
     tu.unit.visit_children([](Cursor c, Cursor parent, void* data){
             auto &tu = *(test_unit*) data;
