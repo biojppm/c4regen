@@ -192,7 +192,14 @@ struct Extractor
 
     void load(c4::yml::NodeRef n);
     size_t extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Entity> *out) const;
-    bool extract(c4::ast::Index &idx, c4::ast::Cursor c, c4::ast::Cursor *extracted) const;
+
+    struct Data
+    {
+        c4::ast::Cursor cursor, tag;
+        bool extracted, has_tag;
+        inline operator bool() const { return extracted; }
+    };
+    Extractor::Data extract(c4::ast::Index &idx, c4::ast::Cursor c) const;
 };
 
 
@@ -508,14 +515,24 @@ private:
         auto visitor = [](ast::Cursor c, ast::Cursor parent, void *data)
         {
             auto vd = (_visitor_data *C4_RESTRICT)data;
-            ast::Cursor target;
-            if(vd->gen->m_extractor.extract(*vd->sf->m_index, c, &target))
+            Extractor::Data ret;
+            if((ret = vd->gen->m_extractor.extract(*vd->sf->m_index, c)) == true)
             {
                 EntityPos pos{vd->gen, vd->type, vd->entities->size()};
                 vd->sf->m_pos.emplace_back(pos);
                 vd->sf->m_chunks.emplace_back();
                 vd->entities->emplace_back();
-                C4_NOT_IMPLEMENTED();
+                EntityT &C4_RESTRICT e = vd->entities->back();
+                ast::Entity ae;
+                ae.tu = vd->sf->m_tu;
+                ae.idx = vd->sf->m_index;
+                ae.cursor = ret.cursor;
+                ae.parent = parent;
+                e.init(ae);
+                if(ret.has_tag)
+                {
+                    e.set_tag(ret.tag, parent);
+                }
             }
             return CXChildVisit_Recurse;
         };
