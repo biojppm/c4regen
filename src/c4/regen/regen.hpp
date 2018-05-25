@@ -528,6 +528,12 @@ public:
 
 public:
 
+    void init(ast::Index $$ idx, ast::TranslationUnit c$$ tu)
+    {
+        ast::Entity e{tu.root(), {}, &tu, &idx};
+        this->Entity::init(e);
+    }
+
     void clear()
     {
         m_enums.clear();

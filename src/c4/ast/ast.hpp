@@ -96,6 +96,7 @@ struct CompilationDb : pimpl_handle<CXCompilationDatabase>
 
     CompilationDb(const char* build_dir) : pimpl_handle<CXCompilationDatabase>()
     {
+        if(build_dir == nullptr) return;
         CXCompilationDatabase_Error err;
         m_handle = clang_CompilationDatabase_fromDirectory(build_dir, &err);
         C4_CHECK_MSG(err == CXCompilationDatabase_NoError, "error constructing compilation database");
@@ -534,8 +535,8 @@ struct Entity
 {
     Cursor  cursor;
     Cursor  parent;
-    TranslationUnit const* C4_RESTRICT tu;
-    Index *C4_RESTRICT idx;
+    TranslationUnit c$ tu;
+    Index $ idx;
 };
 using EntityRef = Entity const& C4_RESTRICT;
 
