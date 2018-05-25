@@ -10,6 +10,7 @@
 #include <c4/error.hpp>
 #include <c4/substr.hpp>
 #include <c4/fs/fs.hpp>
+#include <c4/c4_push.hpp>
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -167,19 +168,29 @@ struct Index : pimpl_handle<CXIndex>
         }
     }
 
-    std::vector<CXString> m_strings;
-    const char* get_string(CXString s)
-    {
-        m_strings.push_back(s);
-        return clang_getCString(s);
-    }
+public:
 
+    /** This provides a facility for holding strings in the Index. Clients
+     * should call this once and store the result, to minimize calls to pairs
+     * of clang_*getString()/clang_disposeString(). Attention should be paid
+     * so that the lifetime of the Index exceeds the lifetime of clients.
+     *
+     * @todo avoid string duplication by using a set or hash set
+     */
     template< class StrGetterPfn, class ...Args >
     const char* to_str(StrGetterPfn fn, Args&&... args)
     {
         CXString cs = fn(std::forward<Args>(args)...);
-        return get_string(cs);
+        return add_string(cs);
     }
+
+    const char* add_string(CXString s)
+    {
+        m_strings.push_back(s);
+        return clang_getCString(m_strings.back());
+    }
+
+    std::vector<CXString> m_strings;
 
 };
 
@@ -231,6 +242,18 @@ struct Region
     {
         return file_contents.range(m_start.offset, m_end.offset);
     }
+
+    bool operator< (Region c$$ that) const
+    {
+        if(this == &that) return false;
+
+        if(m_start.offset < that.m_start.offset) return true;
+        else if(m_start.offset > that.m_start.offset) return false;
+
+        if(m_end.offset < that.m_end.offset) return true;
+
+        return false;
+    }
 };
 
 //-----------------------------------------------------------------------------
@@ -258,13 +281,14 @@ struct Cursor : public CXCursor
     CXType result_type() const { return clang_getCursorResultType(*this); }
     CXType named_type() const { return clang_Type_getNamedType(type()); }
 
-    bool is_declaration() const { return clang_isDeclaration(kind()) != 0; }
-    bool is_reference() const { return clang_isReference(kind()) != 0; }
-    bool is_expression() const { return clang_isExpression(kind()) != 0; }
-    bool is_statement() const { return clang_isStatement(kind()) != 0; }
-    bool is_preprocessing() const { return clang_isPreprocessing(kind()); }
+    bool is_declaration()   const { return clang_isDeclaration(kind())   != 0; }
+    bool is_reference()     const { return clang_isReference(kind())     != 0; }
+    bool is_expression()    const { return clang_isExpression(kind())    != 0; }
+    bool is_statement()     const { return clang_isStatement(kind())     != 0; }
+    bool is_preprocessing() const { return clang_isPreprocessing(kind()) != 0; }
+    bool is_attribute()     const { return clang_isAttribute(kind())     != 0; }
 
-    bool has_attrs() const { return clang_Cursor_hasAttrs(*this); }
+    bool has_attrs() const { return clang_Cursor_hasAttrs(*this) != 0; }
 
     // these utility functions are expensive because of the allocations.
     // They should be called once and the results should be stored.
@@ -564,5 +588,6 @@ inline size_t select(Index &idx, Cursor root, CursorMatcher m, std::vector<ast::
 } // namespace ast
 } // namespace c4
 
+#include <c4/c4_pop.hpp>
 
 #endif // _C4_AST_HPP_
