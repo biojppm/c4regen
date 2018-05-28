@@ -17,12 +17,12 @@ const option::Descriptor usage[] =
     {HELP   , 0, "h", "help" , c4::opt::none    , "  -h, --help  \tPrint usage and exit." },
     {CMD    , 0, "x", "cmd"  , c4::opt::required, "  -x <cmd>, --cmd=<cmd>  \t(required) The command to execute. Must be one of [generate,outfiles]." },
     {CFG    , 0, "c", "cfg"  , c4::opt::required, "  -c <cfg-yml>, --cfg=<cfg-yml>  \t(required) The full path to the regen config YAML file." },
-    {DIR    , 0, "d", "dir"  , c4::opt::nonempty, "  -d <build-dir>, --dir=<build-dir>  \t(required) The full path to the directory containing the compile_commands.json file." },
-    {FLAGS  , 0, "f", "flag" , c4::opt::nonempty, "  -f <compiler-flag>, --flag=<compiler-flag>  \t(required) The full path to the directory containing the compile_commands.json file." },
+    {DIR    , 0, "d", "dir"  , c4::opt::nonempty, "  -d <build-dir>, --dir=<build-dir>  \tThe full path to the directory containing the compile_commands.json file." },
+    {FLAGS  , 0, "f", "flag" , c4::opt::nonempty, "  -f <compiler-flag>, --flag=<compiler-flag>  \tThe full path to the directory containing the compile_commands.json file." },
     {0,0,0,0,0,0}
 };
 
-bool valid_cmd(csubstr cmd)
+inline bool valid_cmd(csubstr cmd)
 {
     return cmd == "generate" || cmd == "outfiles";
 }
@@ -30,9 +30,15 @@ bool valid_cmd(csubstr cmd)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-int exec(int argc, const char *argv[])
+inline int exec(int argc, const char *argv[], bool with_exe_name=false)
 {
     using namespace c4;
+
+    if(with_exe_name)
+    {
+        ++argc;
+        ++argv;
+    }
 
     auto opts = opt::make_parser(usage, argc, argv, HELP, {CFG});
     regen::Regen rg(opts(CFG));
@@ -68,6 +74,20 @@ int exec(int argc, const char *argv[])
     return 0;
 }
 
+template <size_t N>
+inline int exec(const char *(&argv)[N], bool with_exe_name=false)
+{
+    return exec(N, argv, with_exe_name);
+}
+
+inline int exec(std::initializer_list<const char*> il, bool with_exe_name=false)
+{
+    // [support.initlist] 18.9/1 specifies that for std::initializer_list<T>
+    // iterator must be T*
+    auto argv = const_cast<const char**>(il.begin());
+    int  argc = static_cast<int>(il.size());
+    return exec(argc, argv, with_exe_name);
+}
 
 } // namespace regen
 } // namespace c4
