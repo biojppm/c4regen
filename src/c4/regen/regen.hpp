@@ -221,7 +221,34 @@ struct Extractor
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
+
+template<class T>
+struct CodeInstances
+{
+    T m_hdr_preamble;
+    T m_inl_preamble;
+    T m_src_preamble;
+    T m_hdr;
+    T m_inl;
+    T m_src;
+};
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
 struct Generator;
+
+
+struct CodeChunk : public CodeInstances<c4::tpl::Rope>
+{
+    Generator c$ m_generator;
+    Entity    c$ m_originator;
+};
+
+
+//-----------------------------------------------------------------------------
 
 struct CodeTemplate
 {
@@ -247,25 +274,6 @@ struct CodeTemplate
     {
         engine->render(properties, r);
     }
-};
-
-
-template<class T>
-struct CodeInstances
-{
-    T m_hdr_preamble;
-    T m_inl_preamble;
-    T m_src_preamble;
-    T m_hdr;
-    T m_inl;
-    T m_src;
-};
-
-
-struct CodeChunk : public CodeInstances<c4::tpl::Rope>
-{
-    Generator c$ m_generator;
-    Entity c$ m_originator;
 };
 
 
@@ -659,6 +667,8 @@ public:
     const_iterator begin() const { return const_iterator(this, 0); }
     const_iterator end  () const { return const_iterator(this, m_pos.size()); }
 
+public:
+
     Entity c$ resolve(EntityPos c$$ p) const
     {
         switch(p.entity_type)
@@ -680,6 +690,170 @@ public:
 //-----------------------------------------------------------------------------
 
 
+
+struct WriterBase
+{
+    using set_type = std::set<std::string>;
+    using Contributors = std::set<Generator c$>;
+
+    mutable CodeInstances<std::string>  m_names;
+    mutable CodeInstances<std::string>  m_contents;
+    mutable CodeInstances<Contributors> m_contributors;
+
+public:
+
+    virtual ~WriterBase() = default;
+    virtual void load(c4::yml::NodeRef const& n) {}
+    virtual void extract_filenames(SourceFile c$$ src) const = 0;
+
+    void write(SourceFile c$$ src, set_type $ output_names=nullptr, bool get_filenames_only=false) const
+    {
+        if( ! get_filenames_only)
+        {
+            _clear_contents();
+            for(auto c$$ chunk : src.m_chunks)
+            {
+                _append_chunk(chunk);
+            }
+        }
+        if(output_names)
+        {
+            extract_filenames(src);
+        }
+    }
+
+protected:
+
+    void _append_chunk(CodeChunk c$$ chunk) const
+    {
+        _write_credits(chunk);
+        _do_append_chunk(chunk);
+    }
+
+    virtual void _do_append_chunk(CodeChunk c$$ chunk) const = 0;
+
+    void _write_credits(CodeChunk const& chunk) const
+    {
+        if( ! chunk.m_hdr.empty())
+        {
+
+        }
+    }
+
+    void _clear_names() const
+    {
+        m_names.m_hdr_preamble.clear();
+        m_names.m_inl_preamble.clear();
+        m_names.m_src_preamble.clear();
+        m_names.m_hdr.clear();
+        m_names.m_inl.clear();
+        m_names.m_src.clear();
+    }
+
+    virtual void _clear_contents() const
+    {
+        m_contents.m_hdr_preamble.clear();
+        m_contents.m_inl_preamble.clear();
+        m_contents.m_src_preamble.clear();
+        m_contents.m_hdr.clear();
+        m_contents.m_inl.clear();
+        m_contents.m_src.clear();
+        m_contributors.m_hdr_preamble.clear();
+        m_contributors.m_inl_preamble.clear();
+        m_contributors.m_src_preamble.clear();
+        m_contributors.m_hdr.clear();
+        m_contributors.m_inl.clear();
+        m_contributors.m_src.clear();
+    }
+};
+
+
+//-----------------------------------------------------------------------------
+
+struct WriterStdout : public WriterBase
+{
+
+    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    {
+    }
+
+    void extract_filenames(SourceFile c$$ src) const override
+    {
+        _clear_names();
+    }
+
+};
+
+
+
+//-----------------------------------------------------------------------------
+
+struct WriterGenFile : public WriterBase
+{
+
+    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    {
+    }
+
+    void extract_filenames(SourceFile c$$ src) const override
+    {
+    }
+
+};
+
+
+//-----------------------------------------------------------------------------
+
+struct WriterGenGroup : public WriterBase
+{
+
+    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    {
+    }
+
+    void extract_filenames(SourceFile c$$ src) const override
+    {
+    }
+
+};
+
+
+//-----------------------------------------------------------------------------
+
+struct WriterSameFile : public WriterBase
+{
+
+    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    {
+    }
+
+    void extract_filenames(SourceFile c$$ src) const override
+    {
+
+    }
+
+};
+
+
+//-----------------------------------------------------------------------------
+
+struct WriterSingleFile : public WriterBase
+{
+
+    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    {
+    }
+
+    void extract_filenames(SourceFile c$$ src) const override
+    {
+
+    }
+
+};
+
+
+//-----------------------------------------------------------------------------
+
 struct Writer
 {
 
@@ -691,15 +865,65 @@ struct Writer
         SINGLEFILE,
     } Type_e;
 
+    using set_type = WriterBase::set_type;
+
+public:
+
+    Type_e m_type;
+    std::unique_ptr<WriterBase> m_impl;
+
+public:
+
+    void write(SourceFile c$$ src, set_type $ output_names=nullptr, bool get_filenames_only=false) const
+    {
+        m_impl->write(src, output_names, get_filenames_only);
+    }
+
+    void print_output_file_names(SourceFile c$$ src, set_type *output_names) const
+    {
+        output_names->clear();
+        write(src, output_names, /*get_filenames_only*/true);
+        for(auto c$$ name : *output_names)
+        {
+            printf("%s\n", name.c_str());
+        }
+    }
+
+public:
+
+    void load(c4::yml::NodeRef const& n)
+    {
+        csubstr s;
+        n.get_if("writer", &s, csubstr("stdout"));
+        m_type = str2type(s);
+        switch(m_type)
+        {
+        case STDOUT:
+            m_impl.reset(new WriterStdout());
+            break;
+        case GENFILE:
+            m_impl.reset(new WriterGenFile());
+            break;
+        case GENGROUP:
+            m_impl.reset(new WriterGenGroup());
+            break;
+        case SAMEFILE:
+            m_impl.reset(new WriterSameFile());
+            break;
+        case SINGLEFILE:
+            m_impl.reset(new WriterSingleFile());
+            break;
+        default:
+            C4_ERROR("unknown writer type");
+        }
+        m_impl->load(n);
+    }
+
     static Type_e str2type(csubstr type_name)
     {
         if(type_name == "stdout")
         {
             return STDOUT;
-        }
-        else if(type_name == "samefile")
-        {
-            return SAMEFILE;
         }
         else if(type_name == "genfile")
         {
@@ -708,6 +932,10 @@ struct Writer
         else if(type_name == "gengroup")
         {
             return GENGROUP;
+        }
+        else if(type_name == "samefile")
+        {
+            return SAMEFILE;
         }
         else if(type_name == "singlefile")
         {
@@ -720,54 +948,6 @@ struct Writer
         return STDOUT;
     }
 
-public:
-
-    Type_e m_type;
-
-public:
-
-    Writer()
-    {
-    }
-
-    void load(c4::yml::NodeRef const& n)
-    {
-        csubstr s;
-        n.get_if("writer", &s, csubstr("stdout"));
-        m_type = str2type(s);
-    }
-
-    using set_type = std::set<std::string>;
-
-    void write(SourceFile const& src, set_type $ output_names=nullptr, bool get_filenames_only=false) const
-    {
-        C4_NOT_IMPLEMENTED();
-        switch(m_type)
-        {
-        case STDOUT:
-            break;
-        case SAMEFILE:
-            if(output_names) output_names->insert(src.m_region.m_file);
-            break;
-        case GENFILE:
-            break;
-        case GENGROUP:
-            break;
-        case SINGLEFILE:
-            break;
-        default:
-            C4_ERROR("unknown writer type");
-        }
-    }
-
-    void print_output_file_names(SourceFile c$$ src, set_type *output_names) const
-    {
-        write(src, output_names, /*get_filenames_only*/true);
-        for(auto const& name : *output_names)
-        {
-            printf("%s\n", name.c_str());
-        }
-    }
 };
 
 
