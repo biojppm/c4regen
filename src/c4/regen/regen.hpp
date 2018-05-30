@@ -57,6 +57,7 @@ typedef enum {
 } EntityType_e;
 
 
+/** a source code entity of interest */
 struct Entity
 {
     ast::TranslationUnit c$ m_tu{nullptr};
@@ -85,12 +86,15 @@ protected:
 
 
 
-/** A tag used to mark and/or annotate entities. Examples:
- *
+/** A tag used to mark and/or annotate entities. For example:
  *@begincode
- * C4_TAG()
- * // accepts annotations as YAML code:
- * C4_TAG(a, b: c, d: [e, f, g], h: {i: j, k: l})
+ *
+ * MY_TAG()
+ * struct Foo {};
+ *
+ * // a tag accepts annotations as (quasi-)YAML code:
+ * MY_TAG(x, y, z, a, b: c, d: [e, f, g], h: {i: j, k: l})
+ * struct Bar {};
  *@endcode
  *
  */
@@ -121,6 +125,19 @@ struct Tag : public Entity
     }
 };
 
+/** an entity which is possibly tagged */
+struct TaggedEntity : public Entity
+{
+    EntityType_e m_entity_type;
+    Tag m_tag;
+
+    bool is_tagged() const { return ! m_tag.empty(); }
+    void set_tag(ast::Cursor tag, ast::Cursor tag_parent)
+    {
+        ast::Entity e{tag, tag_parent, m_tu, m_index};
+        m_tag.init(e);
+    }
+};
 
 
 struct DataType : public Entity
@@ -137,19 +154,6 @@ struct DataType : public Entity
     bool is_integral_unsigned() const { return ast::is_integral_unsigned(m_cxtype.kind); }
 };
 
-
-struct TaggedEntity : public Entity
-{
-    EntityType_e m_entity_type;
-    Tag m_tag;
-
-    bool is_tagged() const { return ! m_tag.empty(); }
-    void set_tag(ast::Cursor tag, ast::Cursor tag_parent)
-    {
-        ast::Entity e{tag, tag_parent, m_tu, m_index};
-        m_tag.init(e);
-    }
-};
 
 
 struct Var : public TaggedEntity
@@ -174,7 +178,7 @@ typedef enum {
     EXTR_TAGGED_MACRO_ANNOTATED, ///< extract only entities with an annotation within a tag macro
 } ExtractorType_e;
 
-/** A class which examines the AST and extracts useful entities.
+/** Examines the AST and extracts useful entities.
  *
  * YAML config examples:
  * for EXTR_ALL:
@@ -225,9 +229,6 @@ struct Extractor
 template<class T>
 struct CodeInstances
 {
-    T m_hdr_preamble;
-    T m_inl_preamble;
-    T m_src_preamble;
     T m_hdr;
     T m_inl;
     T m_src;
@@ -276,9 +277,29 @@ struct CodeTemplate
     }
 };
 
+struct CodePreamble
+{
+    std::string preamble;
+
+    bool empty() const { return preamble.empty(); }
+
+    bool load(c4::yml::NodeRef const& n, csubstr name)
+    {
+        csubstr s;
+        n.get_if(name, &s);
+        if(s.not_empty())
+        {
+            preamble.assign(s.begin(), s.end());
+        }
+        return ! empty();
+    }
+};
 
 struct Generator : public CodeInstances<CodeTemplate>
 {
+    using Preambles = CodeInstances<CodePreamble>;
+
+    Preambles    m_preambles;
     EntityType_e m_entity_type;
     csubstr      m_name;
     Extractor    m_extractor;
@@ -319,9 +340,6 @@ struct Generator : public CodeInstances<CodeTemplate>
 
     void render(c4::yml::NodeRef const properties, CodeChunk *ch) const
     {
-        m_hdr_preamble.render(properties, &ch->m_hdr_preamble);
-        m_inl_preamble.render(properties, &ch->m_inl_preamble);
-        m_src_preamble.render(properties, &ch->m_src_preamble);
         m_hdr.render(properties, &ch->m_hdr);
         m_inl.render(properties, &ch->m_inl);
         m_src.render(properties, &ch->m_src);
@@ -330,9 +348,9 @@ struct Generator : public CodeInstances<CodeTemplate>
     void load_templates(c4::yml::NodeRef const n)
     {
         m_empty  = false;
-        m_empty |= m_hdr_preamble.load(n, "hdr_preamble");
-        m_empty |= m_inl_preamble.load(n, "inl_preamble");
-        m_empty |= m_src_preamble.load(n, "src_preamble");
+        m_empty |= m_preambles.m_hdr.load(n, "hdr_preamble");
+        m_empty |= m_preambles.m_inl.load(n, "inl_preamble");
+        m_empty |= m_preambles.m_src.load(n, "src_preamble");
         m_empty |= m_hdr         .load(n, "hdr");
         m_empty |= m_inl         .load(n, "inl");
         m_empty |= m_src         .load(n, "src");
@@ -693,17 +711,20 @@ public:
 
 struct WriterBase
 {
+    using Destination_e = enum {HDR, INL, SRC};
+
     using set_type = std::set<std::string>;
     using Contributors = std::set<Generator c$>;
 
     mutable CodeInstances<std::string>  m_names;
     mutable CodeInstances<std::string>  m_contents;
-    mutable CodeInstances<Contributors> m_contributors;
+    mutable CodeInstances<Contributors> m_contributors;  ///< the generators that have
 
 public:
 
     virtual ~WriterBase() = default;
     virtual void load(c4::yml::NodeRef const& n) {}
+
     virtual void extract_filenames(SourceFile c$$ src) const = 0;
 
     void write(SourceFile c$$ src, set_type $ output_names=nullptr, bool get_filenames_only=false) const
@@ -711,9 +732,43 @@ public:
         if( ! get_filenames_only)
         {
             _clear_contents();
+
+            m_contributors.m_hdr.clear();
+            m_contributors.m_inl.clear();
+            m_contributors.m_src.clear();
             for(auto c$$ chunk : src.m_chunks)
             {
-                _append_chunk(chunk);
+                _request_preambles(chunk);
+            }
+
+            // header code
+            for(auto c$ gen : m_contributors.m_hdr)
+            {
+                _append(to_csubstr(gen->m_preambles.m_hdr.preamble), HDR);
+            }
+            for(auto c$$ chunk : src.m_chunks)
+            {
+                _append(chunk.m_hdr, HDR);
+            }
+
+            // inline code
+            for(auto c$ gen : m_contributors.m_inl)
+            {
+                _append(to_csubstr(gen->m_preambles.m_inl.preamble), INL);
+            }
+            for(auto c$$ chunk : src.m_chunks)
+            {
+                _append(chunk.m_inl, INL);
+            }
+
+            // source code
+            for(auto c$ gen : m_contributors.m_src)
+            {
+                _append(to_csubstr(gen->m_preambles.m_src.preamble), SRC);
+            }
+            for(auto c$$ chunk : src.m_chunks)
+            {
+                _append(chunk.m_src, SRC);
             }
         }
         if(output_names)
@@ -724,27 +779,34 @@ public:
 
 protected:
 
-    void _append_chunk(CodeChunk c$$ chunk) const
+    virtual void _append(csubstr s, Destination_e dst) const = 0;
+
+    void _append(c4::tpl::Rope c$$ r, Destination_e dst) const
     {
-        _write_credits(chunk);
-        _do_append_chunk(chunk);
+        for(csubstr s : r.entries())
+        {
+            _append(s, dst);
+        }
     }
 
-    virtual void _do_append_chunk(CodeChunk c$$ chunk) const = 0;
-
-    void _write_credits(CodeChunk const& chunk) const
+    void _request_preambles(CodeChunk c$$ chunk) const
     {
         if( ! chunk.m_hdr.empty())
         {
-
+            m_contributors.m_hdr.insert(chunk.m_generator);
+        }
+        if( ! chunk.m_inl.empty())
+        {
+            m_contributors.m_inl.insert(chunk.m_generator);
+        }
+        if( ! chunk.m_src.empty())
+        {
+            m_contributors.m_src.insert(chunk.m_generator);
         }
     }
 
     void _clear_names() const
     {
-        m_names.m_hdr_preamble.clear();
-        m_names.m_inl_preamble.clear();
-        m_names.m_src_preamble.clear();
         m_names.m_hdr.clear();
         m_names.m_inl.clear();
         m_names.m_src.clear();
@@ -752,15 +814,9 @@ protected:
 
     virtual void _clear_contents() const
     {
-        m_contents.m_hdr_preamble.clear();
-        m_contents.m_inl_preamble.clear();
-        m_contents.m_src_preamble.clear();
         m_contents.m_hdr.clear();
         m_contents.m_inl.clear();
         m_contents.m_src.clear();
-        m_contributors.m_hdr_preamble.clear();
-        m_contributors.m_inl_preamble.clear();
-        m_contributors.m_src_preamble.clear();
         m_contributors.m_hdr.clear();
         m_contributors.m_inl.clear();
         m_contributors.m_src.clear();
@@ -773,7 +829,7 @@ protected:
 struct WriterStdout : public WriterBase
 {
 
-    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    void _append(csubstr s, Destination_e dst) const override
     {
     }
 
@@ -791,7 +847,7 @@ struct WriterStdout : public WriterBase
 struct WriterGenFile : public WriterBase
 {
 
-    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    void _append(csubstr s, Destination_e dst) const override
     {
     }
 
@@ -807,7 +863,7 @@ struct WriterGenFile : public WriterBase
 struct WriterGenGroup : public WriterBase
 {
 
-    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    void _append(csubstr s, Destination_e dst) const override
     {
     }
 
@@ -823,7 +879,7 @@ struct WriterGenGroup : public WriterBase
 struct WriterSameFile : public WriterBase
 {
 
-    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    void _append(csubstr s, Destination_e dst) const override
     {
     }
 
@@ -840,7 +896,7 @@ struct WriterSameFile : public WriterBase
 struct WriterSingleFile : public WriterBase
 {
 
-    void _do_append_chunk(CodeChunk c$$ chunk) const override
+    void _append(csubstr s, Destination_e dst) const override
     {
     }
 
