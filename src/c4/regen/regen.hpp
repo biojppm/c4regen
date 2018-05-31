@@ -712,13 +712,14 @@ public:
 struct WriterBase
 {
     using Destination_e = enum {HDR, INL, SRC};
-
-    using set_type = std::set<std::string>;
+    using CodeStore = CodeInstances<std::string>;
     using Contributors = std::set<Generator c$>;
+    using set_type = std::set<std::string>;
 
-    mutable CodeInstances<std::string>  m_names;
-    mutable CodeInstances<std::string>  m_contents;
-    mutable CodeInstances<Contributors> m_contributors;  ///< the generators that have
+    mutable CodeInstances<Contributors> m_contributors;  ///< generators that contribute code
+    mutable CodeStore  m_file_preambles;
+    mutable CodeStore  m_file_names;
+    mutable CodeStore  m_file_contents;
 
 public:
 
@@ -727,65 +728,77 @@ public:
 
     virtual void extract_filenames(SourceFile c$$ src) const = 0;
 
-    void write(SourceFile c$$ src, set_type $ output_names=nullptr, bool get_filenames_only=false) const
+    void write(SourceFile c$$ src, set_type $ output_names=nullptr) const
     {
-        if( ! get_filenames_only)
+        _begin_file();
+
+        for(auto c$$ chunk : src.m_chunks)
         {
-            _clear_contents();
-
-            m_contributors.m_hdr.clear();
-            m_contributors.m_inl.clear();
-            m_contributors.m_src.clear();
-            for(auto c$$ chunk : src.m_chunks)
-            {
-                _request_preambles(chunk);
-            }
-
-            // header code
-            for(auto c$ gen : m_contributors.m_hdr)
-            {
-                _append(to_csubstr(gen->m_preambles.m_hdr.preamble), HDR);
-            }
-            for(auto c$$ chunk : src.m_chunks)
-            {
-                _append(chunk.m_hdr, HDR);
-            }
-
-            // inline code
-            for(auto c$ gen : m_contributors.m_inl)
-            {
-                _append(to_csubstr(gen->m_preambles.m_inl.preamble), INL);
-            }
-            for(auto c$$ chunk : src.m_chunks)
-            {
-                _append(chunk.m_inl, INL);
-            }
-
-            // source code
-            for(auto c$ gen : m_contributors.m_src)
-            {
-                _append(to_csubstr(gen->m_preambles.m_src.preamble), SRC);
-            }
-            for(auto c$$ chunk : src.m_chunks)
-            {
-                _append(chunk.m_src, SRC);
-            }
+            _request_preambles(chunk);
         }
-        if(output_names)
+
+        // header code
+        for(auto c$ gen : m_contributors.m_hdr)
         {
-            extract_filenames(src);
+            _append_preamble(to_csubstr(gen->m_preambles.m_hdr.preamble), HDR);
         }
+        for(auto c$$ chunk : src.m_chunks)
+        {
+            _append_contents(chunk.m_hdr, HDR);
+        }
+
+        // inline code
+        for(auto c$ gen : m_contributors.m_inl)
+        {
+            _append_preamble(to_csubstr(gen->m_preambles.m_inl.preamble), INL);
+        }
+        for(auto c$$ chunk : src.m_chunks)
+        {
+            _append_contents(chunk.m_inl, INL);
+        }
+
+        // source code
+        for(auto c$ gen : m_contributors.m_src)
+        {
+            _append_preamble(to_csubstr(gen->m_preambles.m_src.preamble), SRC);
+        }
+        for(auto c$$ chunk : src.m_chunks)
+        {
+            _append_contents(chunk.m_src, SRC);
+        }
+
+        _end_file();
     }
+
+    virtual void begin_files() const {}
+    virtual void end_files() const {}
 
 protected:
 
-    virtual void _append(csubstr s, Destination_e dst) const = 0;
+    virtual void _begin_file() const {}
+    virtual void _end_file() const {}
 
-    void _append(c4::tpl::Rope c$$ r, Destination_e dst) const
+    static void _append_to(csubstr s, Destination_e dst, CodeInstances<std::string> $ code)
+    {
+        switch(dst)
+        {
+        case HDR: code->m_hdr.append(s.str, s.len); break;
+        case INL: code->m_inl.append(s.str, s.len); break;
+        case SRC: code->m_src.append(s.str, s.len); break;
+        default: C4_ERROR("unknown destination");
+        }
+    }
+
+    void _append_preamble(csubstr s, Destination_e dst) const
+    {
+        _append_to(s, dst, &m_file_preambles);
+    }
+
+    void _append_contents(c4::tpl::Rope c$$ r, Destination_e dst) const
     {
         for(csubstr s : r.entries())
         {
-            _append(s, dst);
+            _append_to(s, dst, &m_file_contents);
         }
     }
 
@@ -805,22 +818,22 @@ protected:
         }
     }
 
-    void _clear_names() const
+    template <class T>
+    static void _clear(CodeInstances<T> c$ s)
     {
-        m_names.m_hdr.clear();
-        m_names.m_inl.clear();
-        m_names.m_src.clear();
+        s->m_hdr.clear();
+        s->m_inl.clear();
+        s->m_src.clear();
     }
 
-    virtual void _clear_contents() const
+    void _clear() const
     {
-        m_contents.m_hdr.clear();
-        m_contents.m_inl.clear();
-        m_contents.m_src.clear();
-        m_contributors.m_hdr.clear();
-        m_contributors.m_inl.clear();
-        m_contributors.m_src.clear();
+        _clear(&m_file_names);
+        _clear(&m_file_preambles);
+        _clear(&m_file_contents);
+        _clear(&m_contributors);
     }
+
 };
 
 
@@ -829,13 +842,17 @@ protected:
 struct WriterStdout : public WriterBase
 {
 
-    void _append(csubstr s, Destination_e dst) const override
+    void _begin_file() const override
     {
+        _clear();
+    }
+    void _end_file() const override
+    {
+
     }
 
     void extract_filenames(SourceFile c$$ src) const override
     {
-        _clear_names();
     }
 
 };
@@ -844,12 +861,9 @@ struct WriterStdout : public WriterBase
 
 //-----------------------------------------------------------------------------
 
+/** */
 struct WriterGenFile : public WriterBase
 {
-
-    void _append(csubstr s, Destination_e dst) const override
-    {
-    }
 
     void extract_filenames(SourceFile c$$ src) const override
     {
@@ -863,10 +877,6 @@ struct WriterGenFile : public WriterBase
 struct WriterGenGroup : public WriterBase
 {
 
-    void _append(csubstr s, Destination_e dst) const override
-    {
-    }
-
     void extract_filenames(SourceFile c$$ src) const override
     {
     }
@@ -879,13 +889,8 @@ struct WriterGenGroup : public WriterBase
 struct WriterSameFile : public WriterBase
 {
 
-    void _append(csubstr s, Destination_e dst) const override
-    {
-    }
-
     void extract_filenames(SourceFile c$$ src) const override
     {
-
     }
 
 };
@@ -895,10 +900,6 @@ struct WriterSameFile : public WriterBase
 
 struct WriterSingleFile : public WriterBase
 {
-
-    void _append(csubstr s, Destination_e dst) const override
-    {
-    }
 
     void extract_filenames(SourceFile c$$ src) const override
     {
@@ -914,11 +915,11 @@ struct Writer
 {
 
     typedef enum {
-        STDOUT,
-        GENFILE,
-        GENGROUP,
-        SAMEFILE,
-        SINGLEFILE,
+        STDOUT,     ///< @see WriterStdout
+        GENFILE,    ///< @see WriterGenFile
+        GENGROUP,   ///< @see WriterGenGroup
+        SAMEFILE,   ///< @see WriterSameFile
+        SINGLEFILE, ///< @see WriterSingleFile
     } Type_e;
 
     using set_type = WriterBase::set_type;
@@ -1033,20 +1034,43 @@ public:
 
     bool empty() { return m_gens_all.empty(); }
 
-    size_t extract(SourceFile $ sf) const
+public:
+
+    template <class SourceFileNameCollection>
+    size_t extract(SourceFileNameCollection c$ collection, const char* db_dir=nullptr)
     {
-        return sf->extract(m_gens_all.data(), m_gens_all.size());
+        ast::CompilationDb db(db_dir);
+        yml::Tree workspace;
+        yml::NodeRef wsroot = workspace.rootref();
+        SourceFile sf;
+
+        m_writer.begin_files();
+        for(const char* source_file : collection)
+        {
+            ast::Index idx;
+            ast::TranslationUnit unit(idx, source_file, db);
+            sf.clear();
+            sf.init(idx, unit);
+
+            sf.extract(m_gens_all.data(), m_gens_all.size());
+            sf.gencode(m_gens_all.data(), m_gens_all.size(), workspace)
+            m_writer.write(sf);
+        }
+        m_writer.end_files();
     }
 
-    void gencode(SourceFile $ sf, c4::yml::NodeRef workspace) const
+
+    template <class SourceFileNameCollection>
+    size_t print_output_file_names(SourceFileNameCollection c$ collection)
     {
-        sf->gencode(m_gens_all.data(), m_gens_all.size(), workspace);
+        Writer::set_type files;
+        for(const char* source_file : collection)
+        {
+
+        }
     }
 
-    void outcode(SourceFile $ sf) const
-    {
-        m_writer.write(*sf);
-    }
+private:
 
     void print_output_file_names(SourceFile c$$ sf, Writer::set_type *workspace) const
     {

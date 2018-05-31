@@ -43,32 +43,16 @@ inline int exec(int argc, const char *argv[], bool with_exe_name=false)
     auto opts = opt::make_parser(usage, argc, argv, HELP, {CFG});
     regen::Regen rg(opts(CFG));
     if(rg.empty()) return 0;
-    const char* dir = opts[DIR].arg;
-    ast::CompilationDb db(dir);
+
     csubstr cmd = to_csubstr(opts(CMD));
     C4_CHECK(valid_cmd(cmd));
-
-    yml::Tree workspace;
-    yml::NodeRef wsroot = workspace.rootref();
-    regen::SourceFile sf;
-    regen::Writer::set_type outfiles;
-    for(const char* source_file : opts.posn_args())
+    if(cmd == "generate")
     {
-        ast::Index idx;
-        ast::TranslationUnit unit(idx, source_file, db);
-        sf.clear();
-        sf.init(idx, unit);
-        if(cmd == "generate")
-        {
-            rg.extract(&sf);
-            rg.gencode(&sf, wsroot);
-            rg.outcode(&sf);
-        }
-        else if(cmd == "outfiles")
-        {
-            rg.extract(&sf);
-            rg.print_output_file_names(sf, &outfiles);
-        }
+        rg.generate(opts.posn_args(), opts[DIR].arg);
+    }
+    else if(cmd == "outfiles")
+    {
+        rg.print_output_filenames(opts.posn_args());
     }
 
     return 0;
