@@ -62,10 +62,11 @@ struct Entity
 {
     ast::TranslationUnit c$ m_tu{nullptr};
     ast::Index            $ m_index{nullptr};
-    ast::Cursor       m_cursor;
-    ast::Cursor       m_parent;
-    ast::Region       m_region;
-    csubstr           m_str;
+    ast::Cursor             m_cursor;
+    ast::Cursor             m_parent;
+    ast::Region             m_region;
+    csubstr                 m_str;
+    csubstr                 m_name;
 
     virtual void init(astEntityRef e)
     {
@@ -75,6 +76,7 @@ struct Entity
         m_parent = e.parent;
         m_region.init_region(*e.idx, e.cursor);
         m_str = m_region.get_str(to_csubstr(e.tu->m_contents));
+        m_name = _get_display_name();
     }
 
 protected:
@@ -100,7 +102,6 @@ protected:
  */
 struct Tag : public Entity
 {
-    csubstr m_name;
     csubstr m_spec_str;
     c4::yml::Tree m_annotations;
 
@@ -158,7 +159,6 @@ struct DataType : public Entity
 
 struct Var : public TaggedEntity
 {
-    csubstr  m_name;
     DataType m_type;
 
     virtual void init(astEntityRef e) override
@@ -239,18 +239,6 @@ struct CodeInstances
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-struct Generator;
-
-
-struct CodeChunk : public CodeInstances<c4::tpl::Rope>
-{
-    Generator c$ m_generator;
-    Entity    c$ m_originator;
-};
-
-
-//-----------------------------------------------------------------------------
-
 struct CodeTemplate
 {
     std::shared_ptr<c4::tpl::Engine> engine;
@@ -258,11 +246,14 @@ struct CodeTemplate
 
     bool empty() const { return engine.get() == nullptr; }
 
-    bool load(c4::yml::NodeRef const& n, csubstr name)
+    bool load(c4::yml::NodeRef const n, csubstr name, csubstr fallback_tpl={})
     {
         engine.reset();
-        csubstr src;
-        n.get_if(name, &src);
+        csubstr src = fallback_tpl;
+        if(n.valid())
+        {
+            n.get_if(name, &src);
+        }
         if(src.not_empty())
         {
             engine = std::make_shared<c4::tpl::Engine>();
@@ -276,6 +267,23 @@ struct CodeTemplate
         engine->render(properties, r);
     }
 };
+
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
+struct Generator;
+
+
+struct CodeChunk : public CodeInstances<c4::tpl::Rope>
+{
+    Generator c$ m_generator;
+    Entity    c$ m_originator;
+};
+
+
+//-----------------------------------------------------------------------------
 
 struct CodePreamble
 {
@@ -299,16 +307,18 @@ struct Generator : public CodeInstances<CodeTemplate>
 {
     using Preambles = CodeInstances<CodePreamble>;
 
+    Extractor    m_extractor;
     Preambles    m_preambles;
     EntityType_e m_entity_type;
     csubstr      m_name;
-    Extractor    m_extractor;
     bool         m_empty;
 
     Generator() :
         CodeInstances<CodeTemplate>(),
-        m_name(),
         m_extractor(),
+        m_preambles(),
+        m_entity_type(),
+        m_name(),
         m_empty(true)
     {
     }
@@ -367,21 +377,18 @@ struct Function;
 struct FunctionParameter : public Entity
 {
     Function c$ m_function{nullptr};
-    csubstr     m_name;
     DataType    m_data_type;
 
     void init_param(astEntityRef e, Function c$ f)
     {
         m_function = f;
         this->Entity::init(e);
-        m_name = _get_display_name();
     }
 };
 
 /** a free-standing function */
 struct Function : public TaggedEntity
 {
-    csubstr m_name;
     DataType m_return_type;
     std::vector<FunctionParameter> m_parameters;
 
@@ -389,7 +396,6 @@ struct Function : public TaggedEntity
     {
         m_entity_type = ENT_FUNCTION;
         this->TaggedEntity::init(e);
-        m_name = _get_display_name();
         int num_args = clang_Cursor_getNumArguments(m_cursor);
         m_parameters.resize(num_args);
         unsigned i = 0;
@@ -432,7 +438,6 @@ struct EnumSymbol : public TaggedEntity
 /** an enumeration type */
 struct Enum : public TaggedEntity
 {
-    csubstr m_name;
     std::vector<EnumSymbol> m_symbols;
     DataType m_underlying_type;
 
@@ -440,7 +445,6 @@ struct Enum : public TaggedEntity
     {
         m_entity_type = ENT_ENUM;
         this->TaggedEntity::init(e);
-        m_name = _get_display_name();
         m_underlying_type.m_cxtype = clang_getEnumDeclIntegerType(m_cursor);
     }
 };
@@ -501,7 +505,6 @@ struct Method : public Function
 
 struct Class : public TaggedEntity
 {
-    csubstr m_name;
     std::vector<Member> m_members;
     std::vector<Method> m_methods;
 
@@ -509,7 +512,6 @@ struct Class : public TaggedEntity
     {
         this->TaggedEntity::init(e);
         m_entity_type = ENT_CLASS;
-        m_name = _get_display_name();
         C4_NOT_IMPLEMENTED();
     }
 };
@@ -554,7 +556,7 @@ public:
 
 public:
 
-    void init(ast::Index $$ idx, ast::TranslationUnit c$$ tu)
+    void init_source_file(ast::Index $$ idx, ast::TranslationUnit c$$ tu)
     {
         ast::Entity e{tu.root(), {}, &tu, &idx};
         this->Entity::init(e);
@@ -707,30 +709,130 @@ public:
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
+constexpr const char s_default_tpl_chunk[] = R"(
+// generator: {{generator.name}}
+// entity: {{entity.name}} @ {{entity.file}}:{{entity.line}}
+{{gencode}}
+)";
+
+constexpr const char s_default_tpl_hdr[] = R"({% if has_hdr %}
+// DO NOT EDIT!
+// This was automatically generated with https://github.com/biojppm/c4regen
+#ifndef {{hdr.include_guard}}
+#define {{hdr.include_guard}}
+
+{{hdr.preamble}}
+
+{% if namespace %}
+{{namespace.begin}}
+{% endif %}
+
+{{hdr.gencode}}
+
+{% if namespace %}
+{{namespace.end}}
+{% endif %}
+
+{% if has_inl %}
+#include "{{inl.filename}}"
+{% endif %}
+
+#endif // {{hdr.include_guard}}
+{% endif %})";
+
+constexpr const char s_default_tpl_inl[] = R"({% if has_inl %}
+// DO NOT EDIT!
+// This was automatically generated with https://github.com/biojppm/c4regen
+#ifndef {{inl.include_guard}}
+#define {{inl.include_guard}}
+
+{% if has_hdr %}
+#ifndef {{hdr.include_guard}}
+#include "{{hdr.filename}}"
+#endif
+{% endif %}
+
+{{inl.preamble}}
+
+{% if namespace %}
+{{namespace.begin}}
+{% endif %}
+
+{{inl.gencode}}
+
+{% if namespace %}
+{{namespace.end}}
+{% endif %}
+
+#endif // {{inl.include_guard}}
+{% endif %})";
+
+constexpr const char s_default_tpl_src[] = R"({% if has_src %}
+// DO NOT EDIT!
+// This was automatically generated with https://github.com/biojppm/c4regen
+
+{% if has_hdr %}
+#ifndef {{hdr.include_guard}}
+#include "{{hdr.filename}}"
+#endif
+{% endif %}
+
+{% if has_inl %}
+#ifndef {{inl.include_guard}}
+#include "{{inl.filename}}"
+#endif
+{% endif %}
+
+{{src.preamble}}
+
+{% if namespace %}
+{{namespace.begin}}
+{% endif %}
+
+{{src.gencode}}
+
+{% if namespace %}
+{{namespace.end}}
+{% endif %}
+{% endif %})";
 
 
 struct WriterBase
 {
-    using Destination_e = enum {HDR, INL, SRC};
+    typedef enum {HDR, INL, SRC} Destination_e;
     using CodeStore = CodeInstances<std::string>;
     using Contributors = std::set<Generator c$>;
-    using set_type = std::set<std::string>;
+    using set_type     = std::set<std::string>;
 
-    mutable CodeInstances<Contributors> m_contributors;  ///< generators that contribute code
-    mutable CodeStore  m_file_preambles;
-    mutable CodeStore  m_file_names;
-    mutable CodeStore  m_file_contents;
+    CodeInstances<Contributors> m_contributors;  ///< generators that contributed code
+    CodeInstances<std::string>  m_file_names;
+    CodeInstances<std::string>  m_file_preambles;
+    CodeInstances<std::string>  m_file_contents;
+    CodeInstances<CodeTemplate> m_file_tpl;
+
+    CodeTemplate  m_tpl_chunk;
+    c4::yml::Tree m_tpl_ws_tree;
+    c4::tpl::Rope m_tpl_ws_rope;
+    std::string   m_tpl_ws_str;
 
 public:
 
     virtual ~WriterBase() = default;
-    virtual void load(c4::yml::NodeRef const& n) {}
-
-    virtual void extract_filenames(SourceFile c$$ src) const = 0;
-
-    void write(SourceFile c$$ src, set_type $ output_names=nullptr) const
+    virtual void load(c4::yml::NodeRef const n)
     {
-        _begin_file();
+        auto ntpl = n.find_child("tpl");
+        m_tpl_chunk.load(ntpl, "chunk", s_default_tpl_chunk);
+        m_file_tpl.m_hdr.load(ntpl, "hdr", s_default_tpl_hdr);
+        m_file_tpl.m_inl.load(ntpl, "inl", s_default_tpl_inl);
+        m_file_tpl.m_src.load(ntpl, "src", s_default_tpl_src);
+    }
+
+    virtual void extract_filenames(csubstr src_file, set_type $ filenames) = 0;
+
+    void write(SourceFile c$$ src, set_type $ output_names=nullptr)
+    {
+C4_ERROR("asdfjkhasdkjhasdkjh");
+        _begin_file(src);
 
         for(auto c$$ chunk : src.m_chunks)
         {
@@ -744,7 +846,7 @@ public:
         }
         for(auto c$$ chunk : src.m_chunks)
         {
-            _append_contents(chunk.m_hdr, HDR);
+            _append_code_chunk(chunk, chunk.m_hdr, HDR);
         }
 
         // inline code
@@ -754,7 +856,7 @@ public:
         }
         for(auto c$$ chunk : src.m_chunks)
         {
-            _append_contents(chunk.m_inl, INL);
+            _append_code_chunk(chunk, chunk.m_inl, INL);
         }
 
         // source code
@@ -764,45 +866,23 @@ public:
         }
         for(auto c$$ chunk : src.m_chunks)
         {
-            _append_contents(chunk.m_src, SRC);
+            _append_code_chunk(chunk, chunk.m_src, SRC);
         }
 
-        _end_file();
+        _render_files();
+
+        _end_file(src);
     }
 
-    virtual void begin_files() const {}
-    virtual void end_files() const {}
+    virtual void begin_files() {}
+    virtual void end_files() {}
 
 protected:
 
-    virtual void _begin_file() const {}
-    virtual void _end_file() const {}
+    virtual void _begin_file(SourceFile c$$ src) {}
+    virtual void _end_file(SourceFile c$$ src) {}
 
-    static void _append_to(csubstr s, Destination_e dst, CodeInstances<std::string> $ code)
-    {
-        switch(dst)
-        {
-        case HDR: code->m_hdr.append(s.str, s.len); break;
-        case INL: code->m_inl.append(s.str, s.len); break;
-        case SRC: code->m_src.append(s.str, s.len); break;
-        default: C4_ERROR("unknown destination");
-        }
-    }
-
-    void _append_preamble(csubstr s, Destination_e dst) const
-    {
-        _append_to(s, dst, &m_file_preambles);
-    }
-
-    void _append_contents(c4::tpl::Rope c$$ r, Destination_e dst) const
-    {
-        for(csubstr s : r.entries())
-        {
-            _append_to(s, dst, &m_file_contents);
-        }
-    }
-
-    void _request_preambles(CodeChunk c$$ chunk) const
+    void _request_preambles(CodeChunk c$$ chunk)
     {
         if( ! chunk.m_hdr.empty())
         {
@@ -818,15 +898,118 @@ protected:
         }
     }
 
+    void _append_preamble(csubstr s, Destination_e dst)
+    {
+        _append_to(s, dst, &m_file_preambles);
+    }
+
+    static void _append_to(csubstr s, Destination_e dst, CodeInstances<std::string> $ code)
+    {
+        switch(dst)
+        {
+        case HDR: code->m_hdr.append(s.str, s.len); break;
+        case INL: code->m_inl.append(s.str, s.len); break;
+        case SRC: code->m_src.append(s.str, s.len); break;
+        default: C4_ERROR("unknown destination");
+        }
+    }
+
+    void _append_code_chunk(CodeChunk c$$ ch, c4::tpl::Rope c$$ r, Destination_e dst)
+    {
+        // linearize the chunk's rope into a temporary buffer
+        r.chain_all_resize(&m_tpl_ws_str);
+
+        // now render the chunk template using that buffer
+        m_tpl_ws_tree.clear();
+        m_tpl_ws_tree.clear_arena();
+        c4::yml::NodeRef root = m_tpl_ws_tree.rootref();
+        root |= c4::yml::MAP;
+        c4::yml::NodeRef gen = root["generator"];
+        gen |= c4::yml::MAP;
+        gen["name"] = ch.m_generator->m_name;
+        c4::yml::NodeRef ent = root["entity"];
+        ent |= c4::yml::MAP;
+        ent["name"] = ch.m_originator->m_name;
+        ent["file"] = ch.m_originator->m_region.m_file;
+        ent["line"] << ch.m_originator->m_region.m_start.line;
+        root["gencode"] = to_csubstr(m_tpl_ws_str);
+        m_tpl_chunk.render(root, &m_tpl_ws_rope);
+
+        // now append the templated chunk to the file contents
+        for(csubstr entry : m_tpl_ws_rope.entries())
+        {
+            _append_to(entry, dst, &m_file_contents);
+        }
+    }
+
+    void _render_files()
+    {
+        m_tpl_ws_tree.clear();
+        m_tpl_ws_tree.clear_arena();
+        c4::yml::NodeRef root = m_tpl_ws_tree.rootref();
+        root |= c4::yml::MAP;
+
+        root["has_hdr"] << ( ! m_file_contents.m_hdr.empty());
+        root["has_inl"] << ( ! m_file_contents.m_inl.empty());
+        root["has_src"] << ( ! m_file_contents.m_src.empty());
+        c4::yml::NodeRef hdr = root["hdr"];
+        c4::yml::NodeRef inl = root["inl"];
+        c4::yml::NodeRef src = root["src"];
+        hdr |= c4::yml::MAP;
+        inl |= c4::yml::MAP;
+        src |= c4::yml::MAP;
+        hdr["preamble"] = to_csubstr(m_file_preambles.m_hdr);
+        inl["preamble"] = to_csubstr(m_file_preambles.m_inl);
+        src["preamble"] = to_csubstr(m_file_preambles.m_src);
+        hdr["gencode"] = to_csubstr(m_file_contents.m_hdr);
+        inl["gencode"] = to_csubstr(m_file_contents.m_inl);
+        src["gencode"] = to_csubstr(m_file_contents.m_src);
+        hdr["include_guard"] = _incguard(to_csubstr(m_file_names.m_hdr));
+        inl["include_guard"] = _incguard(to_csubstr(m_file_names.m_inl));
+        //src["include_guard"] = _incguard(to_csubstr(m_file_names.m_src));
+        hdr["filename"] = to_csubstr(m_file_names.m_hdr);
+        inl["filename"] = to_csubstr(m_file_names.m_inl);
+        src["filename"] = to_csubstr(m_file_names.m_src);
+
+        // note that the properties are using the file contents
+        // strings, so we can't chain the rope directly into those
+        // strings. That's the reason for chaining into the temp
+        // string and then copying it to the file contents strings.
+
+        m_file_tpl.m_hdr.render(root, &m_tpl_ws_rope);
+        m_tpl_ws_rope.chain_all_resize(&m_tpl_ws_str);
+        m_file_contents.m_hdr = m_tpl_ws_str;
+
+        m_file_tpl.m_inl.render(root, &m_tpl_ws_rope);
+        m_tpl_ws_rope.chain_all_resize(&m_tpl_ws_str);
+        m_file_contents.m_inl = m_tpl_ws_str;
+
+        m_file_tpl.m_src.render(root, &m_tpl_ws_rope);
+        m_tpl_ws_rope.chain_all_resize(&m_tpl_ws_str);
+        m_file_contents.m_src = m_tpl_ws_str;
+    }
+
+    csubstr _incguard(csubstr filename)
+    {
+        substr incg = m_tpl_ws_tree.alloc_arena(filename.len + 7);
+        cat(incg, filename, "_GUARD_");
+        for(auto $$ c : incg)
+        {
+            if(c == '.' || c == '/' || c == '\\') c = '_';
+            else c = std::toupper(c);
+        }
+        return incg;
+    }
+
     template <class T>
-    static void _clear(CodeInstances<T> c$ s)
+    static void _clear(CodeInstances<T> $ s)
     {
         s->m_hdr.clear();
         s->m_inl.clear();
         s->m_src.clear();
     }
 
-    void _clear() const
+    void _clear()
     {
         _clear(&m_file_names);
         _clear(&m_file_preambles);
@@ -842,17 +1025,25 @@ protected:
 struct WriterStdout : public WriterBase
 {
 
-    void _begin_file() const override
+    void _begin_file(SourceFile c$$ src) override
     {
         _clear();
     }
-    void _end_file() const override
+    void _end_file(SourceFile c$$ src) override
     {
+        printf("%.*s\n", (int)m_file_preambles.m_hdr.size(), m_file_preambles.m_hdr.data());
+        printf("%.*s\n", (int)m_file_contents .m_hdr.size(), m_file_contents .m_hdr.data());
 
+        printf("%.*s\n", (int)m_file_preambles.m_inl.size(), m_file_preambles.m_inl.data());
+        printf("%.*s\n", (int)m_file_contents .m_inl.size(), m_file_contents .m_inl.data());
+
+        printf("%.*s\n", (int)m_file_preambles.m_src.size(), m_file_preambles.m_src.data());
+        printf("%.*s\n", (int)m_file_contents .m_src.size(), m_file_contents .m_src.data());
     }
 
-    void extract_filenames(SourceFile c$$ src) const override
+    void extract_filenames(csubstr src_file, set_type $ filenames) override
     {
+        // nothing to do here
     }
 
 };
@@ -865,7 +1056,7 @@ struct WriterStdout : public WriterBase
 struct WriterGenFile : public WriterBase
 {
 
-    void extract_filenames(SourceFile c$$ src) const override
+    void extract_filenames(csubstr src_file, set_type $ filenames) override
     {
     }
 
@@ -877,7 +1068,7 @@ struct WriterGenFile : public WriterBase
 struct WriterGenGroup : public WriterBase
 {
 
-    void extract_filenames(SourceFile c$$ src) const override
+    void extract_filenames(csubstr src_file, set_type $ filenames) override
     {
     }
 
@@ -889,7 +1080,7 @@ struct WriterGenGroup : public WriterBase
 struct WriterSameFile : public WriterBase
 {
 
-    void extract_filenames(SourceFile c$$ src) const override
+    void extract_filenames(csubstr src_file, set_type $ filenames) override
     {
     }
 
@@ -901,7 +1092,7 @@ struct WriterSameFile : public WriterBase
 struct WriterSingleFile : public WriterBase
 {
 
-    void extract_filenames(SourceFile c$$ src) const override
+    void extract_filenames(csubstr src_file, set_type $ filenames) override
     {
 
     }
@@ -931,24 +1122,22 @@ public:
 
 public:
 
-    void write(SourceFile c$$ src, set_type $ output_names=nullptr, bool get_filenames_only=false) const
+    void write(SourceFile c$$ src)
     {
-        m_impl->write(src, output_names, get_filenames_only);
+        m_impl->write(src);
     }
 
-    void print_output_file_names(SourceFile c$$ src, set_type *output_names) const
+    void extract_filenames(csubstr src_file, set_type *workspace)
     {
-        output_names->clear();
-        write(src, output_names, /*get_filenames_only*/true);
-        for(auto c$$ name : *output_names)
-        {
-            printf("%s\n", name.c_str());
-        }
+        m_impl->extract_filenames(src_file, workspace);
     }
+
+    void begin_files() { m_impl->begin_files(); }
+    void end_files() { m_impl->end_files(); }
 
 public:
 
-    void load(c4::yml::NodeRef const& n)
+    void load(c4::yml::NodeRef const n)
     {
         csubstr s;
         n.get_if("writer", &s, csubstr("stdout"));
@@ -1032,12 +1221,12 @@ public:
         _load_config_file(config_file);
     }
 
-    bool empty() { return m_gens_all.empty(); }
+    bool empty() const { return m_gens_all.empty(); }
 
 public:
 
     template <class SourceFileNameCollection>
-    size_t extract(SourceFileNameCollection c$ collection, const char* db_dir=nullptr)
+    void gencode(SourceFileNameCollection c$$ collection, const char* db_dir=nullptr)
     {
         ast::CompilationDb db(db_dir);
         yml::Tree workspace;
@@ -1050,10 +1239,10 @@ public:
             ast::Index idx;
             ast::TranslationUnit unit(idx, source_file, db);
             sf.clear();
-            sf.init(idx, unit);
+            sf.init_source_file(idx, unit);
 
             sf.extract(m_gens_all.data(), m_gens_all.size());
-            sf.gencode(m_gens_all.data(), m_gens_all.size(), workspace)
+            sf.gencode(m_gens_all.data(), m_gens_all.size(), workspace);
             m_writer.write(sf);
         }
         m_writer.end_files();
@@ -1061,21 +1250,17 @@ public:
 
 
     template <class SourceFileNameCollection>
-    size_t print_output_file_names(SourceFileNameCollection c$ collection)
+    void print_output_filenames(SourceFileNameCollection c$$ collection)
     {
-        Writer::set_type files;
+        Writer::set_type workspace;
         for(const char* source_file : collection)
         {
-
+            m_writer.extract_filenames(to_csubstr(source_file), &workspace);
         }
-    }
-
-private:
-
-    void print_output_file_names(SourceFile c$$ sf, Writer::set_type *workspace) const
-    {
-        workspace->clear();
-        m_writer.print_output_file_names(sf, workspace);
+        for(auto c$$ name : workspace)
+        {
+            printf("%s\n", name.c_str());
+        }
     }
 
 private:

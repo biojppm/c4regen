@@ -46,9 +46,10 @@ inline int exec(int argc, const char *argv[], bool with_exe_name=false)
 
     csubstr cmd = to_csubstr(opts(CMD));
     C4_CHECK(valid_cmd(cmd));
+
     if(cmd == "generate")
     {
-        rg.generate(opts.posn_args(), opts[DIR].arg);
+        rg.gencode(opts.posn_args(), opts[DIR].arg);
     }
     else if(cmd == "outfiles")
     {
