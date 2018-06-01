@@ -1,9 +1,25 @@
 set(src
     c4/ast/ast.hpp
     c4/ast/ast.cpp
+    c4/regen/class.hpp
+    c4/regen/class.cpp
     c4/regen/exec.hpp
+    c4/regen/entity.hpp
+    c4/regen/entity.cpp
+    c4/regen/enum.hpp
+    c4/regen/enum.cpp
+    c4/regen/extractor.hpp
+    c4/regen/extractor.cpp
+    c4/regen/function.hpp
+    c4/regen/function.cpp
+    c4/regen/generator.hpp
+    c4/regen/generator.cpp
     c4/regen/regen.hpp
     c4/regen/regen.cpp
+    c4/regen/source_file.hpp
+    c4/regen/source_file.cpp
+    c4/regen/writer.hpp
+    c4/regen/writer.cpp
 )
 
 find_library(LIBCLANG_LIB clang)
