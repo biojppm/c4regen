@@ -61,9 +61,11 @@ struct pimpl_handle
     pimpl_handle(T h) : m_handle(h) {}
     pimpl_handle& operator= (T h) { C4_ASSERT(m_handle == nullptr); m_handle = (h); }
 
-protected:
+public:
 
     pimpl_handle() : m_handle(nullptr) {}
+
+protected:
 
     pimpl_handle(pimpl_handle const&) = delete;
     pimpl_handle(pimpl_handle && that) { this->__move(&that); }
@@ -113,6 +115,7 @@ struct CompilationDb : pimpl_handle<CXCompilationDatabase>
 
     std::vector<const char*> const& get_cmd(const char* full_file_name) const
     {
+        C4_CHECK_MSG(m_handle != nullptr, "no compilation database");
         CXCompileCommands cmds = clang_CompilationDatabase_getCompileCommands(m_handle, full_file_name);
         unsigned sz = clang_CompileCommands_getSize(cmds);
         C4_CHECK_MSG(sz > 0, "no compilation commands found for file %s. Is it a full path?", full_file_name);
@@ -416,23 +419,58 @@ size_t select(Index &idx         , Cursor root, CursorMatcher m, std::vector<ast
 
 constexpr const unsigned default_options = CXTranslationUnit_DetailedPreprocessingRecord;
 
-struct TranslationUnit : pimpl_handle< CXTranslationUnit >
+struct TranslationUnit : pimpl_handle<CXTranslationUnit>
 {
-    using pimpl_handle< CXTranslationUnit >::pimpl_handle;
     Index *m_index;
     std::vector<char> m_contents;
 
+public:
+
     ~TranslationUnit()
     {
+        clear();
+    }
+
+    // inherit base ctors
+    using pimpl_handle<CXTranslationUnit>::pimpl_handle;
+
+    TranslationUnit(Index &idx, csubstr src, const char * const* cmds, size_t cmds_sz, unsigned options=default_options, bool delete_tmp=true)
+        :
+          pimpl_handle<CXTranslationUnit>()
+    {
+        reset(idx, src, cmds, cmds_sz, options, delete_tmp);
+    }
+
+    TranslationUnit(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=default_options)
+        :
+          pimpl_handle<CXTranslationUnit>()
+    {
+        reset(idx, filename, cmds, cmds_sz, options);
+    }
+
+    TranslationUnit(Index &idx, const char *filename, CompilationDb const& db, unsigned options=default_options)
+        :
+          pimpl_handle<CXTranslationUnit>()
+    {
+        reset(idx, filename, db, options);
+    }
+
+public:
+
+    void clear()
+    {
+        m_contents.clear();
         if(m_handle)
         {
             clang_disposeTranslationUnit(m_handle);
             m_handle = nullptr;
         }
+
     }
 
-    TranslationUnit(Index &idx, csubstr src, const char * const* cmds, size_t cmds_sz, unsigned options=default_options, bool delete_tmp=true)
+    void reset(Index &idx, csubstr src, const char * const* cmds, size_t cmds_sz, unsigned options=default_options, bool delete_tmp=true)
     {
+        clear();
         m_index = &idx;
         m_contents.assign(src.begin(), src.end());
         auto tmp = c4::fs::ScopedTmpFile(src.str, src.len, "c4regen.tmp-XXXXXXXX.cpp");
@@ -440,18 +478,20 @@ struct TranslationUnit : pimpl_handle< CXTranslationUnit >
         this->_parse2(idx, tmp.m_name, cmds, cmds_sz, options);
     }
 
-    TranslationUnit(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=default_options)
+    void reset(Index &idx, const char *filename, const char * const* cmds, size_t cmds_sz, unsigned options=default_options)
     {
+        clear();
         m_index = &idx;
         c4::fs::file_get_contents(filename, &m_contents);
         this->_parse_argv(idx, filename, cmds, cmds_sz, options);
     }
 
-    TranslationUnit(Index &idx, const char *filename, CompilationDb const& db, unsigned options=default_options)
+    void reset(Index &idx, const char *filename, CompilationDb const& db, unsigned options=default_options)
     {
+        clear();
         m_index = &idx;
         c4::fs::file_get_contents(filename, &m_contents);
-        auto const& cmd = db.get_cmd(filename);
+        auto c$$ cmd = db.get_cmd(filename);
         C4_CHECK(cmd.size() > 1);
         this->_parse_argv(idx, nullptr, cmd.data(), cmd.size(), options);
     }

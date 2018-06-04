@@ -189,13 +189,8 @@ struct WriterStdout : public WriterBase
     }
     void _end_file(SourceFile c$$ src) override
     {
-        printf("%.*s\n", (int)m_file_preambles.m_hdr.size(), m_file_preambles.m_hdr.data());
         printf("%.*s\n", (int)m_file_contents .m_hdr.size(), m_file_contents .m_hdr.data());
-
-        printf("%.*s\n", (int)m_file_preambles.m_inl.size(), m_file_preambles.m_inl.data());
         printf("%.*s\n", (int)m_file_contents .m_inl.size(), m_file_contents .m_inl.data());
-
-        printf("%.*s\n", (int)m_file_preambles.m_src.size(), m_file_preambles.m_src.data());
         printf("%.*s\n", (int)m_file_contents .m_src.size(), m_file_contents .m_src.data());
     }
 

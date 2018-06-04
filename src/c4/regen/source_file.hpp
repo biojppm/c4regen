@@ -1,10 +1,10 @@
 #ifndef _c4_REGEN_SOURCE_FILE_HPP_
 #define _c4_REGEN_SOURCE_FILE_HPP_
 
-#include "c4/regen/entity.hpp"
 #include "c4/regen/enum.hpp"
 #include "c4/regen/class.hpp"
 #include "c4/regen/function.hpp"
+#include "c4/regen/extractor.hpp"
 
 #include <c4/c4_push.hpp>
 

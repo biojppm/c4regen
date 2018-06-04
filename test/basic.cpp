@@ -65,10 +65,36 @@ int main(int argc, char *argv[]) { return 0; }
 }
 
 
+struct SrcAndGen
+{
+    const char *src;
+    const char *gen;
+};
+
+void test_regen_exec(const char *cfg_yml_buf, std::initializer_list<SrcAndGen> sources)
+{
+    auto yml = to_csubstr(cfg_yml_buf);
+    auto cfg_file = c4::fs::ScopedTmpFile(yml.str, yml.len, "c4regen.tmp-XXXXXXXX.cfg.yml", "wb", /*do_delete*/false);
+    std::vector<const char*> args = {"-x", "generate", "-c", cfg_file.m_name};
+    std::vector<c4::fs::ScopedTmpFile> src_files;
+    std::vector<std::string> src_file_fullnames;
+    std::string cwd;
+    fs::cwd(&cwd);
+    for(SrcAndGen sg : sources)
+    {
+        src_files.emplace_back(sg.src, strlen(sg.src), "c4regen.tmp-XXXXXXXX.cpp", "wb", /*do_delete*/false);
+        // we need the full path to the file
+        src_file_fullnames.emplace_back();
+        src_files.back().full_path(&src_file_fullnames.back());
+        args.emplace_back(src_file_fullnames.back().c_str());
+    }
+    c4::regen::exec((int)args.size(), args.data());
+}
+
+
 TEST(foo, baz)
 {
-    const char cfg_yml_buf[] = R"(
-
+    test_regen_exec(R"(
 writer: stdout # one of: stdout, samefile, genfile, gengroup, singlefile
 
 generators:
@@ -92,11 +118,8 @@ generators:
           EnumPairs<{{enum.type}}> r(vals);
           return r;
       }
-)";
-    csubstr yml = cfg_yml_buf;
-    auto cfg = c4::fs::ScopedTmpFile(yml.str, yml.len, "c4regen.tmp-XXXXXXXX.cfg.yml");
-    cfg.do_delete(false);
-    c4::regen::exec({"-x", "generate", "-c", cfg.m_name});
+)",
+    {{"", ""}});
 }
 
 } // namespace ast

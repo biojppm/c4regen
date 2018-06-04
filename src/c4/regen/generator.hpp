@@ -93,6 +93,9 @@ struct CodePreamble
     }
 };
 
+
+//-----------------------------------------------------------------------------
+
 struct Generator : public CodeInstances<CodeTemplate>
 {
     using Preambles = CodeInstances<CodePreamble>;
