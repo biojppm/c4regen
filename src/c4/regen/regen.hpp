@@ -50,28 +50,33 @@ public:
 public:
 
     template <class SourceFileNameCollection>
-    void gencode(SourceFileNameCollection c$$ collection, const char* db_dir=nullptr)
+    void gencode(SourceFileNameCollection c$$ collection, const char* db_dir=nullptr, const char* const* flags=nullptr, size_t num_flags=0)
     {
         ast::CompilationDb db(db_dir);
         yml::Tree workspace;
-        yml::NodeRef wsroot = workspace.rootref();
         SourceFile sf;
 
         m_writer.begin_files();
+        ast::TranslationUnit unit;
         for(const char* source_file : collection)
         {
             ast::Index idx;
-            ast::TranslationUnit unit(idx, source_file, db);
+            if(db_dir)
+            {
+                unit.reset(idx, source_file, db);
+            }
+            else
+            {
+                unit.reset(idx, source_file, flags, num_flags);
+            }
             sf.clear();
             sf.init_source_file(idx, unit);
-
             sf.extract(m_gens_all.data(), m_gens_all.size());
             sf.gencode(m_gens_all.data(), m_gens_all.size(), workspace);
             m_writer.write(sf);
         }
         m_writer.end_files();
     }
-
 
     template <class SourceFileNameCollection>
     void print_output_filenames(SourceFileNameCollection c$$ collection)

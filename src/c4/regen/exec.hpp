@@ -49,7 +49,19 @@ inline int exec(int argc, const char *argv[], bool with_exe_name=false)
 
     if(cmd == "generate")
     {
-        rg.gencode(opts.posn_args(), opts[DIR].arg);
+        if(opts[DIR])
+        {
+            rg.gencode(opts.posn_args(), opts[DIR].arg);
+        }
+        else
+        {
+            std::vector<const char*> flags;
+            for(auto const& f : opts.opts(FLAGS))
+            {
+                flags.push_back(f.arg);
+            }
+            rg.gencode(opts.posn_args(), nullptr, flags.data(), flags.size());
+        }
     }
     else if(cmd == "outfiles")
     {

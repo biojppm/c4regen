@@ -75,7 +75,7 @@ void test_regen_exec(const char *cfg_yml_buf, std::initializer_list<SrcAndGen> s
 {
     auto yml = to_csubstr(cfg_yml_buf);
     auto cfg_file = c4::fs::ScopedTmpFile(yml.str, yml.len, "c4regen.tmp-XXXXXXXX.cfg.yml", "wb", /*do_delete*/false);
-    std::vector<const char*> args = {"-x", "generate", "-c", cfg_file.m_name};
+    std::vector<const char*> args = {"-x", "generate", "-c", cfg_file.m_name, "-f", "'-x'", "-f", "'c++'"};
     std::vector<c4::fs::ScopedTmpFile> src_files;
     std::vector<std::string> src_file_fullnames;
     std::string cwd;
@@ -119,7 +119,11 @@ generators:
           return r;
       }
 )",
-    {{"", ""}});
+    {{"", ""},
+     {R"(C4_ENUM(foo)
+typedef enum {FOO, BAR} MyEnum_e;
+)"}
+    });
 }
 
 } // namespace ast
