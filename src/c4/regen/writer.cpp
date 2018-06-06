@@ -1,5 +1,6 @@
 #include "c4/regen/writer.hpp"
 
+#include <cctype>
 #include <c4/c4_push.hpp>
 
 namespace c4 {

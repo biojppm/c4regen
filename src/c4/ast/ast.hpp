@@ -58,12 +58,12 @@ struct pimpl_handle
     T       operator-> ()      { return m_handle; }
     const T operator-> () const{ return m_handle; }
 
-    pimpl_handle(T h) : m_handle(h) {}
-    pimpl_handle& operator= (T h) { C4_ASSERT(m_handle == nullptr); m_handle = (h); }
-
 public:
 
     pimpl_handle() : m_handle(nullptr) {}
+
+    pimpl_handle(T h) : m_handle(h) {}
+    pimpl_handle& operator= (T h) { C4_ASSERT(m_handle == nullptr); m_handle = (h); }
 
 protected:
 
@@ -266,8 +266,7 @@ struct Region
 
 struct Cursor : public CXCursor
 {
-    using CXCursor::CXCursor;
-
+    inline Cursor() : CXCursor() {}
     inline Cursor(CXCursor c) : CXCursor(c) {}
 
     Cursor semantic_parent() const { return Cursor(clang_getCursorSemanticParent(*this)); }
@@ -372,8 +371,7 @@ inline void visit_children(Cursor root, visitor_pfn visitor, void *data=nullptr,
 
 struct Token : public CXToken
 {
-    using CXToken::CXToken;
-
+    Token() : CXToken() {}
     Token(CXToken t) : CXToken(t) {}
 
     CXTokenKind kind() const { return clang_getTokenKind(*this); }
@@ -432,6 +430,7 @@ public:
     }
 
     // inherit base ctors
+    TranslationUnit() : pimpl_handle<CXTranslationUnit>() {}
     using pimpl_handle<CXTranslationUnit>::pimpl_handle;
 
     TranslationUnit(Index &idx, csubstr src, const char * const* cmds, size_t cmds_sz, unsigned options=default_options, bool delete_tmp=true)
