@@ -120,7 +120,8 @@ generators:
       }
 )",
     {{"", ""},
-     {R"(C4_ENUM(foo)
+     {R"(#define C4_ENUM(...)
+C4_ENUM(foo)
 typedef enum {FOO, BAR} MyEnum_e;
 )"}
     });
