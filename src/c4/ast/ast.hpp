@@ -47,6 +47,28 @@ inline bool is_integral_signed(CXTypeKind t)
 
 //-----------------------------------------------------------------------------
 
+struct Cursor;
+using visitor_pfn = CXChildVisitResult (*)(Cursor c, Cursor parent, void *data);
+
+namespace detail {
+
+struct _visitor_data
+{
+    visitor_pfn visitor;
+    void *data;
+    bool same_unit_only;
+    CXTranslationUnit transunit;
+};
+
+inline CXChildVisitResult _visit_impl(CXCursor cursor, CXCursor parent, CXClientData data);
+
+} // namespace detail
+
+inline void visit_children(Cursor root, visitor_pfn visitor, void *data=nullptr, bool same_unit_only=true);
+
+
+//-----------------------------------------------------------------------------
+
 template <class T>
 struct pimpl_handle
 {
@@ -280,8 +302,11 @@ struct Cursor : public CXCursor
     inline Cursor() : CXCursor() {}
     inline Cursor(CXCursor c) : CXCursor(c) {}
 
+    Cursor root() const { CXTranslationUnit unit = clang_Cursor_getTranslationUnit(*this); return clang_getTranslationUnitCursor(unit); }
     Cursor semantic_parent() const { return Cursor(clang_getCursorSemanticParent(*this)); }
     Cursor lexical_parent() const { return Cursor(clang_getCursorLexicalParent(*this)); }
+
+    Cursor next_sibling() const;
 
     Location location(Index &idx) const { return Location(idx, *this); }
     Region region(Index &idx) const { return Region(idx, *this); }
@@ -313,9 +338,28 @@ struct Cursor : public CXCursor
     const char*   raw_comment(Index &idx) const { return idx.store_str(clang_Cursor_getRawCommentText(*this)); }
     const char* brief_comment(Index &idx) const { return idx.store_str(clang_Cursor_getBriefCommentText(*this)); }
 
-    Cursor next_sibling() const { C4_NOT_IMPLEMENTED(); return clang_getNullCursor(); }
-
 };
+
+
+//-----------------------------------------------------------------------------
+
+inline CXChildVisitResult detail::_visit_impl(CXCursor cursor, CXCursor parent, CXClientData data)
+{
+    _visitor_data *C4_RESTRICT vd = reinterpret_cast<_visitor_data*>(data);
+    if((vd->same_unit_only && (clang_Cursor_getTranslationUnit(cursor) != vd->transunit))
+            || clang_Cursor_isMacroBuiltin(cursor))
+    {
+        return CXChildVisit_Continue;
+    }
+    return vd->visitor(cursor, parent, vd->data);
+}
+
+
+inline void visit_children(Cursor root, visitor_pfn visitor, void *data, bool same_unit_only)
+{
+    detail::_visitor_data vd{visitor, data, same_unit_only, clang_Cursor_getTranslationUnit(root)};
+    clang_visitChildren(root, &detail::_visit_impl, &vd);
+}
 
 
 //-----------------------------------------------------------------------------
@@ -339,41 +383,6 @@ struct CursorMatcher
     }
 
 };
-
-
-//-----------------------------------------------------------------------------
-
-using visitor_pfn = CXChildVisitResult (*)(Cursor c, Cursor parent, void *data);
-
-namespace detail {
-
-struct _visitor_data
-{
-    visitor_pfn visitor;
-    void *data;
-    bool same_unit_only;
-    CXTranslationUnit transunit;
-};
-
-inline CXChildVisitResult _visit_impl(CXCursor cursor, CXCursor parent, CXClientData data)
-{
-    _visitor_data *C4_RESTRICT vd = reinterpret_cast<_visitor_data*>(data);
-    if((vd->same_unit_only && (clang_Cursor_getTranslationUnit(cursor) != vd->transunit))
-            || clang_Cursor_isMacroBuiltin(cursor))
-    {
-        return CXChildVisit_Continue;
-    }
-    return vd->visitor(cursor, parent, vd->data);
-}
-
-} // namespace detail
-
-inline void visit_children(Cursor root, visitor_pfn visitor, void *data=nullptr, bool same_unit_only=true)
-{
-    detail::_visitor_data vd{visitor, data, same_unit_only, clang_Cursor_getTranslationUnit(root)};
-    clang_visitChildren(root, &detail::_visit_impl, &vd);
-}
-
 
 
 //-----------------------------------------------------------------------------
