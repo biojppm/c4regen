@@ -154,11 +154,29 @@ struct Index : pimpl_handle<CXIndex>
 {
     using pimpl_handle<CXIndex>::pimpl_handle;
 
-    Index() : pimpl_handle(clang_createIndex(/*excludeDeclarationsFromPCH*/0, /*displayDiagnostics*/1))
+    Index() : pimpl_handle(_s_create())
     {
     }
 
     ~Index()
+    {
+        _clear();
+    }
+
+    void clear()
+    {
+        _clear();
+        m_handle = _s_create();
+    }
+
+private:
+
+    static CXIndex _s_create()
+    {
+        return clang_createIndex(/*excludeDeclarationsFromPCH*/0, /*displayDiagnostics*/1);
+    }
+
+    void _clear()
     {
         for(auto &s : m_strings)
         {
@@ -181,14 +199,7 @@ public:
      *
      * @todo avoid string duplication by using a set or hash set
      */
-    template< class StrGetterPfn, class ...Args >
-    const char* to_str(StrGetterPfn fn, Args&&... args)
-    {
-        CXString cs = fn(std::forward<Args>(args)...);
-        return add_string(cs);
-    }
-
-    const char* add_string(CXString s)
+    const char* store_str(CXString s)
     {
         m_strings.push_back(s);
         return clang_getCString(m_strings.back());
@@ -218,7 +229,7 @@ struct Location : public LocData
         CXSourceLocation loc = clang_getCursorLocation(c);
         CXFile f;
         clang_getExpansionLocation(loc, &f, &line, &column, &offset);
-        file = idx.to_str(&clang_getFileName, f);
+        file = idx.store_str(clang_getFileName(f));
     }
 };
 
@@ -239,7 +250,7 @@ struct Region
         CXFile f;
         clang_getExpansionLocation(s, &f, &m_start.line, &m_start.column, &m_start.offset);
         clang_getExpansionLocation(e, nullptr, &m_end.line, &m_end.column, &m_end.offset);
-        m_file = idx.to_str(&clang_getFileName, f);
+        m_file = idx.store_str(clang_getFileName(f));
     }
 
     csubstr get_str(csubstr file_contents) const
@@ -275,7 +286,7 @@ struct Cursor : public CXCursor
     Location location(Index &idx) const { return Location(idx, *this); }
     Region region(Index &idx) const { return Region(idx, *this); }
 
-    bool is_same(Cursor c) { return clang_equalCursors(*this, c) != 0; }
+    bool is_same(Cursor c) const { return clang_equalCursors(*this, c) != 0; }
 
     unsigned hash() const { return clang_hashCursor(*this); }
     CXCursorKind kind() const { return clang_getCursorKind(*this); }
@@ -295,15 +306,15 @@ struct Cursor : public CXCursor
 
     // these utility functions are expensive because of the allocations.
     // They should be called once and the results should be stored.
-    const char*  display_name(Index &idx) const { return idx.to_str(&clang_getCursorDisplayName, *this); }
-    const char*      spelling(Index &idx) const { return idx.to_str(&clang_getCursorSpelling, *this); }
-    const char* type_spelling(Index &idx) const { return idx.to_str(&clang_getTypeSpelling, type()); }
-    const char* kind_spelling(Index &idx) const { return idx.to_str(&clang_getCursorKindSpelling, kind()); }
-    const char*   raw_comment(Index &idx) const { return idx.to_str(&clang_Cursor_getRawCommentText, *this); }
-    const char* brief_comment(Index &idx) const { return idx.to_str(&clang_Cursor_getBriefCommentText, *this); }
+    const char*  display_name(Index &idx) const { return idx.store_str(clang_getCursorDisplayName(*this)); }
+    const char*      spelling(Index &idx) const { return idx.store_str(clang_getCursorSpelling(*this)); }
+    const char* type_spelling(Index &idx) const { return idx.store_str(clang_getTypeSpelling(type())); }
+    const char* kind_spelling(Index &idx) const { return idx.store_str(clang_getCursorKindSpelling(kind())); }
+    const char*   raw_comment(Index &idx) const { return idx.store_str(clang_Cursor_getRawCommentText(*this)); }
+    const char* brief_comment(Index &idx) const { return idx.store_str(clang_Cursor_getBriefCommentText(*this)); }
 
-    Cursor prev_sibling() const { C4_NOT_IMPLEMENTED(); return clang_getNullCursor(); }
     Cursor next_sibling() const { C4_NOT_IMPLEMENTED(); return clang_getNullCursor(); }
+
 };
 
 
@@ -378,7 +389,7 @@ struct Token : public CXToken
 
     // these utility functions are expensive because of the allocations.
     // They should be called once and the results should be stored.
-    const char* spelling(Index &idx, CXTranslationUnit const& tu) const { return idx.to_str(&clang_getTokenSpelling, tu, *this); }
+    const char* spelling(Index &idx, CXTranslationUnit const& tu) const { return idx.store_str(clang_getTokenSpelling(tu, *this)); }
 };
 
 struct CursorTokens

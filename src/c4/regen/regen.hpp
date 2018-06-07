@@ -53,14 +53,16 @@ public:
     void gencode(SourceFileNameCollection c$$ collection, const char* db_dir=nullptr, const char* const* flags=nullptr, size_t num_flags=0)
     {
         ast::CompilationDb db(db_dir);
+        ast::Index idx;
+        ast::TranslationUnit unit;
         yml::Tree workspace;
         SourceFile sf;
 
         m_writer.begin_files();
-        ast::TranslationUnit unit;
         for(const char* source_file : collection)
         {
-            ast::Index idx;
+            sf.clear();
+            idx.clear();
             if(db_dir)
             {
                 unit.reset(idx, source_file, db);
@@ -69,7 +71,6 @@ public:
             {
                 unit.reset(idx, source_file, flags, num_flags);
             }
-            sf.clear();
             sf.init_source_file(idx, unit);
             sf.extract(m_gens_all.data(), m_gens_all.size());
             sf.gencode(m_gens_all.data(), m_gens_all.size(), workspace);
