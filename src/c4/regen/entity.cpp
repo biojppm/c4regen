@@ -21,8 +21,8 @@ csubstr find_pair(csubstr s, char open, char close, bool allow_nested)
         if(e == csubstr::npos) return csubstr();
         return s.range(b, e);
     }
-    size_t e, curr = b, count = 0;
-    const char both[] = {open, close};
+    size_t e, curr = b+1, count = 0;
+    const char both[] = {open, close, '\0'};
     while((e = s.first_of(both, curr)) != csubstr::npos)
     {
         if(s[e] == open)
@@ -32,7 +32,7 @@ csubstr find_pair(csubstr s, char open, char close, bool allow_nested)
         }
         else if(s[e] == close)
         {
-            if(count == 0) return s.range(b, e);
+            if(count == 0) return s.range(b, e+1);
             --count;
             curr = e+1;
         }
