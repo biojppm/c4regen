@@ -97,6 +97,7 @@ size_t Extractor::extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu,
 Extractor::Data Extractor::extract(c4::ast::Index &idx, c4::ast::Cursor c) const
 {
     Extractor::Data ret;
+    ret.extracted = false;
     switch(m_type)
     {
     case EXTR_ALL:
@@ -109,9 +110,9 @@ Extractor::Data Extractor::extract(c4::ast::Index &idx, c4::ast::Cursor c) const
         {
             if(c.display_name(idx) == m_tag)
             {
+                ret.extracted = true;
                 ret.cursor = c.next_sibling();
                 ret.tag = c;
-                ret.extracted = true;
                 ret.has_tag = true;
                 return ret;
             }

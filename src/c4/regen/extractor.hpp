@@ -52,7 +52,6 @@ struct Extractor
     {
         c4::ast::Cursor cursor, tag;
         bool extracted, has_tag;
-        inline operator bool() const { return extracted; }
     };
     Extractor::Data extract(c4::ast::Index &idx, c4::ast::Cursor c) const;
 };

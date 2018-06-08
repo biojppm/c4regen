@@ -56,6 +56,7 @@ public:
 
 private:
 
+
     template<class EntityT>
     void _extract(std::vector<EntityT> $ entities, EntityType_e type, Generator c$$ g)
     {
@@ -65,13 +66,14 @@ private:
             std::vector<EntityT> $ entities;
             EntityType_e type;
             Generator c$ gen;
-        } vd{this, entities, type, &g};
+        };
+        _visitor_data vd{this, entities, type, &g};
 
         auto visitor = [](ast::Cursor c, ast::Cursor parent, void *data)
         {
             auto vd = (_visitor_data $)data;
-            Extractor::Data ret;
-            if((ret = vd->gen->m_extractor.extract(*vd->sf->m_index, c)) == true)
+            Extractor::Data ret = vd->gen->m_extractor.extract(*vd->sf->m_index, c);
+            if(ret.extracted)
             {
                 EntityPos pos{vd->gen, vd->type, vd->entities->size()};
                 vd->sf->m_pos.emplace_back(pos);
