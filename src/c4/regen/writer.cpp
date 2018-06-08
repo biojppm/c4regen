@@ -97,13 +97,14 @@ void WriterBase::_append_code_chunk(CodeChunk c$$ ch, c4::tpl::Rope c$$ r, Desti
     // linearize the chunk's rope into a temporary buffer
     r.chain_all_resize(&m_tpl_ws_str);
 
-    // now render the chunk template using that buffer
+    // render the chunk template using that buffer
     m_tpl_ws_tree.clear();
     m_tpl_ws_tree.clear_arena();
     c4::yml::NodeRef root = m_tpl_ws_tree.rootref();
     root |= c4::yml::MAP;
     c4::yml::NodeRef gen = root["generator"];
     gen |= c4::yml::MAP;
+    C4_ASSERT(ch.m_generator != nullptr);
     gen["name"] = ch.m_generator->m_name;
     c4::yml::NodeRef ent = root["entity"];
     ent |= c4::yml::MAP;
@@ -113,7 +114,7 @@ void WriterBase::_append_code_chunk(CodeChunk c$$ ch, c4::tpl::Rope c$$ r, Desti
     root["gencode"] = to_csubstr(m_tpl_ws_str);
     m_tpl_chunk.render(root, &m_tpl_ws_rope);
 
-    // now append the templated chunk to the file contents
+    // append the templated chunk to the file contents
     for(csubstr entry : m_tpl_ws_rope.entries())
     {
         _append_to(entry, dst, &m_file_contents);

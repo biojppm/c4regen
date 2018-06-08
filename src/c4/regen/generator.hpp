@@ -132,9 +132,9 @@ struct Generator : public CodeInstances<CodeTemplate>
 
     void generate(Entity c$$ o, c4::yml::NodeRef root, CodeChunk *ch) const
     {
-        if(m_empty) return;
         ch->m_generator = this;
         ch->m_originator = &o;
+        if(m_empty) return;
         create_prop_tree(o, root);
         render(root, ch);
     }
