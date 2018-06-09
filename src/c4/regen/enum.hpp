@@ -31,12 +31,8 @@ struct Enum : public TaggedEntity
     std::vector<EnumSymbol> m_symbols;
     DataType m_underlying_type;
 
-    virtual void init(astEntityRef e) override
-    {
-        m_entity_type = ENT_ENUM;
-        this->TaggedEntity::init(e);
-        m_underlying_type.m_cxtype = clang_getEnumDeclIntegerType(m_cursor);
-    }
+    virtual void init(astEntityRef e) override;
+
 };
 
 

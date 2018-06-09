@@ -337,8 +337,18 @@ struct Cursor : public CXCursor
     bool is_statement()     const { return clang_isStatement(kind())     != 0; }
     bool is_preprocessing() const { return clang_isPreprocessing(kind()) != 0; }
     bool is_attribute()     const { return clang_isAttribute(kind())     != 0; }
+    bool has_attrs()        const { return clang_Cursor_hasAttrs(*this)  != 0; }
 
-    bool has_attrs() const { return clang_Cursor_hasAttrs(*this) != 0; }
+    // template info
+    bool is_tpl() const { CXCursorKind k = kind(); return k == CXCursor_FunctionTemplate || k == CXCursor_ClassTemplate || k == CXCursor_ClassTemplatePartialSpecialization; }
+    bool is_tpl_class() const { return kind() == CXCursor_ClassTemplate; }
+    bool is_tpl_function() const { return kind() == CXCursor_FunctionTemplate; }
+    bool is_tpl_specialization() const { return kind() == CXCursor_ClassTemplatePartialSpecialization; }
+    int  num_tpl_args() const { return clang_Cursor_getNumTemplateArguments(*this); }
+    enum CXTemplateArgumentKind tpl_arg_kind(int i) const { return clang_Cursor_getTemplateArgumentKind(*this, i); }
+    CXType tpl_arg_type(unsigned i) const { return clang_Cursor_getTemplateArgumentType(*this, i); }
+    long long tpl_arg_ival(unsigned i) const { return clang_Cursor_getTemplateArgumentValue(*this, i); }
+    unsigned long long tpl_arg_uval(unsigned i) const { return clang_Cursor_getTemplateArgumentUnsignedValue(*this, i); }
 
     // these utility functions are expensive because of the allocations.
     // They should be called once and the results should be stored.
