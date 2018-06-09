@@ -38,9 +38,31 @@ Cursor Cursor::next_sibling() const
         }
         return CXChildVisit_Continue;
     }, &data);
+
     return data.next;
 }
 
+Cursor Cursor::first_child() const
+{
+    struct _fchdata
+    {
+        Cursor c;
+        Cursor child;
+    } data{*this, clang_getNullCursor()};
+
+    visit_children(*this, [](Cursor c, Cursor parent, void *d_){
+        auto d = (_fchdata $) d_;
+        if(parent.is_same(d->c))
+        {
+            d->child = c;
+            return CXChildVisit_Break;
+        }
+        // not sure if this will ever be hit
+        return CXChildVisit_Continue;
+    }, &data);
+
+    return data.child;
+}
 } // namespace ast
 } // namespace c4
 

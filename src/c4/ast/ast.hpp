@@ -307,6 +307,7 @@ struct Cursor : public CXCursor
     Cursor lexical_parent() const { return Cursor(clang_getCursorLexicalParent(*this)); }
 
     Cursor next_sibling() const;
+    Cursor first_child() const;
 
     Location location(Index &idx) const { return Location(idx, *this); }
     Region region(Index &idx) const { return Region(idx, *this); }
