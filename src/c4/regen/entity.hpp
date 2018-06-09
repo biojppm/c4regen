@@ -37,16 +37,7 @@ struct Entity
     csubstr                 m_str;
     csubstr                 m_name;
 
-    virtual void init(astEntityRef e)
-    {
-        m_tu = e.tu;
-        m_index = e.idx;
-        m_cursor = e.cursor;
-        m_parent = e.parent;
-        m_region.init_region(*e.idx, e.cursor);
-        m_str = m_region.get_str(to_csubstr(e.tu->m_contents));
-        m_name = _get_display_name();
-    }
+    virtual void init(astEntityRef e);
 
 protected:
 
