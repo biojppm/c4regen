@@ -231,6 +231,16 @@ public:
 
 };
 
+inline void print_str(CXString cxs, bool skip_empty=false, const char *fmt="%s")
+{
+    const char *s = clang_getCString(cxs);
+    if(strlen(s) || ! skip_empty)
+    {
+        printf(fmt, s);
+    }
+    clang_disposeString(cxs);
+}
+
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -339,6 +349,8 @@ struct Cursor : public CXCursor
     const char*   raw_comment(Index &idx) const { return idx.store_str(clang_Cursor_getRawCommentText(*this)); }
     const char* brief_comment(Index &idx) const { return idx.store_str(clang_Cursor_getBriefCommentText(*this)); }
 
+    void print_recursive(unsigned indent=0) const;
+    void print(unsigned indent=0) const;
 };
 
 

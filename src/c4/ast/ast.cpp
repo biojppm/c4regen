@@ -63,6 +63,32 @@ Cursor Cursor::first_child() const
 
     return data.child;
 }
+
+void Cursor::print_recursive(unsigned indent) const
+{
+    print(indent);
+    Cursor n = clang_getNullCursor();
+    for(Cursor c = first_child(); !c.is_same(n); c = c.next_sibling())
+    {
+        c.print_recursive(indent+1);
+    }
+}
+
+void Cursor::print(unsigned indent) const
+{
+    CXSourceLocation loc = clang_getCursorLocation(*this);
+    CXFile f;
+    unsigned line, col, offs;
+    clang_getExpansionLocation(loc, &f, &line, &col, &offs);
+    print_str(clang_getFileName(f));
+    printf(":%u:%u: %*s", line, col, 2*indent, "");
+    print_str(clang_getCursorKindSpelling(kind()));
+    print_str(clang_getCursorDisplayName(*this), /*skip_empty*/true, ": name='%s'");
+    print_str(clang_getTypeSpelling(clang_getCursorType(*this)), /*skip_empty*/true, ": type='%s'");
+    print_str(clang_getCursorSpelling(*this), /*skip_empty*/true, ": spell='%s'");
+    printf("\n");
+}
+
 } // namespace ast
 } // namespace c4
 
