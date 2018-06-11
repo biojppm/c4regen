@@ -134,18 +134,27 @@ struct Generator : public CodeInstances<CodeTemplate>
     {
         ch->m_generator = this;
         ch->m_originator = &o;
-        if(m_empty) return;
-        create_prop_tree(o, root);
+        o.create_prop_tree(root);
         render(root, ch);
     }
 
-    virtual void create_prop_tree(Entity c$$ o, c4::yml::NodeRef root) const = 0;
-
     void render(c4::yml::NodeRef const properties, CodeChunk *ch) const
     {
-        m_hdr.render(properties, &ch->m_hdr);
-        m_inl.render(properties, &ch->m_inl);
-        m_src.render(properties, &ch->m_src);
+        _render(properties, m_hdr, &ch->m_hdr);
+        _render(properties, m_inl, &ch->m_inl);
+        _render(properties, m_src, &ch->m_src);
+    }
+
+    void _render(c4::yml::NodeRef const properties, CodeTemplate const& ctpl, c4::tpl::Rope *dst) const
+    {
+        if(ctpl.empty())
+        {
+            dst->clear();
+        }
+        else
+        {
+            ctpl.render(properties, dst);
+        }
     }
 
     void load_templates(c4::yml::NodeRef const n)
