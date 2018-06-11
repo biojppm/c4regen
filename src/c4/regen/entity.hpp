@@ -25,19 +25,42 @@ typedef enum {
     ENT_METHOD,
 } EntityType_e;
 
+//-----------------------------------------------------------------------------
+
+struct Entity;
+
+struct TemplateArg
+{
+    CXTemplateArgumentKind m_kind;
+    CXType                 m_type;
+    size_t                 m_val_size;
+    char                   m_val_buf[64];
+
+    void init(Entity *e, unsigned i);
+};
+
+
+//-----------------------------------------------------------------------------
 
 /** a source code entity of interest */
 struct Entity
 {
-    ast::TranslationUnit c$ m_tu{nullptr};
-    ast::Index            $ m_index{nullptr};
-    ast::Cursor             m_cursor;
-    ast::Cursor             m_parent;
-    ast::Region             m_region;
-    csubstr                 m_str;
-    csubstr                 m_name;
+    ast::TranslationUnit  c$ m_tu{nullptr};
+    ast::Index             $ m_index{nullptr};
+    ast::Cursor              m_cursor;
+    ast::Cursor              m_parent;
+    ast::Region              m_region;
+    csubstr                  m_str;
+    csubstr                  m_name;
+
+    bool                     m_is_tpl;
+    std::vector<TemplateArg> m_tpl_args;
+
+public:
 
     virtual void init(astEntityRef e);
+    
+    virtual void create_prop_tree(c4::yml::NodeRef root) const;
 
 protected:
 

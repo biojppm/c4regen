@@ -4,6 +4,15 @@
 namespace c4 {
 namespace regen {
 
+void TemplateArg::init(Entity *e, unsigned i)
+{
+    m_kind = e->m_cursor.tpl_arg_kind(i);
+    m_type = e->m_cursor.tpl_arg_type(i);
+}
+
+
+//-----------------------------------------------------------------------------
+
 void Entity::init(astEntityRef e)
 {
     m_tu = e.tu;
@@ -13,6 +22,47 @@ void Entity::init(astEntityRef e)
     m_region.init_region(*e.idx, e.cursor);
     m_str = m_region.get_str(to_csubstr(e.tu->m_contents));
     m_name = _get_display_name();
+
+    m_tpl_args.clear();
+    if(m_cursor.is_tpl())
+    {
+        for(unsigned i = 0; i < m_cursor.num_tpl_args(); ++i)
+        {
+            m_tpl_args.emplace_back();
+            m_tpl_args.back().init(this, i);
+        }
+    }
+}
+
+void Entity::create_prop_tree(c4::yml::NodeRef n) const
+{
+    n |= yml::MAP;
+    n["name"] = m_name;
+    n["spelling"] = m_cursor.spelling(*m_index);
+    n["kind"] = m_cursor.kind_spelling(*m_index);
+    n["type"] = m_cursor.type_spelling(*m_index);
+    n["brief_comment"] = m_cursor.brief_comment(*m_index);
+    n["raw_comment"] = m_cursor.raw_comment(*m_index);
+
+    if(m_cursor.is_tpl())
+    {
+        n["is_tpl"] = "1";
+        if(m_cursor.is_tpl_class()) n["is_tpl_class"] = "1";
+        if(m_cursor.is_tpl_function()) n["is_tpl_function"] = "1";
+        for(auto const& tpl_arg : m_tpl_args)
+        {
+
+        }
+    }
+
+    n["region"] |= yml::MAP;
+    n["region"]["file"] = to_csubstr(m_region.m_file);
+    n["region"]["start"] |= yml::MAP;
+    n["region"]["start"]["line"] << m_region.m_start.line;
+    n["region"]["start"]["column"] << m_region.m_start.column;
+    n["region"]["end"] |= yml::MAP;
+    n["region"]["end"]["line"] << m_region.m_end.line;
+    n["region"]["end"]["column"] << m_region.m_end.column;
 }
 
 
