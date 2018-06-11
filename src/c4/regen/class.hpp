@@ -61,10 +61,6 @@ struct Class : public TaggedEntity
 struct ClassGenerator : public Generator
 {
     ClassGenerator() : Generator() { m_entity_type = ENT_CLASS; }
-    void create_prop_tree(Entity const& o, c4::yml::NodeRef root) const override
-    {
-        C4_NOT_IMPLEMENTED();
-    }
 };
 
 

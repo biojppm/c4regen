@@ -344,7 +344,7 @@ struct Cursor : public CXCursor
     bool is_tpl_class() const { return kind() == CXCursor_ClassTemplate; }
     bool is_tpl_function() const { return kind() == CXCursor_FunctionTemplate; }
     bool is_tpl_specialization() const { return kind() == CXCursor_ClassTemplatePartialSpecialization; }
-    int  num_tpl_args() const { return clang_Cursor_getNumTemplateArguments(*this); }
+    unsigned num_tpl_args() const { return (unsigned)clang_Cursor_getNumTemplateArguments(*this); }
     enum CXTemplateArgumentKind tpl_arg_kind(int i) const { return clang_Cursor_getTemplateArgumentKind(*this, i); }
     CXType tpl_arg_type(unsigned i) const { return clang_Cursor_getTemplateArgumentType(*this, i); }
     long long tpl_arg_ival(unsigned i) const { return clang_Cursor_getTemplateArgumentValue(*this, i); }
