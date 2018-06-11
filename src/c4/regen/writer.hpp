@@ -23,7 +23,7 @@ constexpr const char s_default_tpl_chunk[] = R"(
 //-----------------------------------------------------------------------------
 
 /** the template used to render header files */
-constexpr const char s_default_tpl_hdr[] = R"({% if has_hdr %}
+constexpr const char s_default_tpl_hdr[] = R"({% if has_hdr != 0 %}
 // DO NOT EDIT!
 // This was automatically generated with https://github.com/biojppm/c4regen
 #ifndef {{hdr.include_guard}}
@@ -52,7 +52,7 @@ constexpr const char s_default_tpl_hdr[] = R"({% if has_hdr %}
 //-----------------------------------------------------------------------------
 
 /** the template used to render inline (definition header) files */
-constexpr const char s_default_tpl_inl[] = R"({% if has_inl %}
+constexpr const char s_default_tpl_inl[] = R"({% if has_inl != 0 %}
 // DO NOT EDIT!
 // This was automatically generated with https://github.com/biojppm/c4regen
 #ifndef {{inl.include_guard}}
@@ -83,7 +83,7 @@ constexpr const char s_default_tpl_inl[] = R"({% if has_inl %}
 //-----------------------------------------------------------------------------
 
 /** the template used to render source files */
-constexpr const char s_default_tpl_src[] = R"({% if has_src %}
+constexpr const char s_default_tpl_src[] = R"({% if has_src != 0 %}
 // DO NOT EDIT!
 // This was automatically generated with https://github.com/biojppm/c4regen
 
@@ -189,9 +189,11 @@ struct WriterStdout : public WriterBase
     }
     void _end_file(SourceFile c$$ src) override
     {
-        printf("%.*s\n", (int)m_file_contents .m_hdr.size(), m_file_contents .m_hdr.data());
-        printf("%.*s\n", (int)m_file_contents .m_inl.size(), m_file_contents .m_inl.data());
-        printf("%.*s\n", (int)m_file_contents .m_src.size(), m_file_contents .m_src.data());
+#define _c4prfile(which) if( ! m_file_contents.which.empty()) { printf("%.*s\n", (int)m_file_contents.which.size(), m_file_contents.which.data()); }
+        _c4prfile(m_hdr)
+        _c4prfile(m_inl)
+        _c4prfile(m_src)
+#undef _c4prfile
     }
 
     void extract_filenames(csubstr src_file, set_type $ filenames) override
