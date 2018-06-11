@@ -15,10 +15,12 @@ struct EnumSymbol : public TaggedEntity
 {
     Enum    *m_enum;
     csubstr  m_sym;
-    csubstr  m_val;
     char     m_val_buf[32];
+    size_t   m_val_size;
 
     void init_symbol(astEntityRef r, Enum *e);
+
+
 
 };
 
@@ -41,10 +43,6 @@ struct Enum : public TaggedEntity
 struct EnumGenerator : public Generator
 {
     EnumGenerator() : Generator() { m_entity_type = ENT_ENUM; }
-    void create_prop_tree(Entity const& o, c4::yml::NodeRef root) const override
-    {
-        C4_NOT_IMPLEMENTED();
-    }
 };
 
 
