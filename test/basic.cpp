@@ -106,8 +106,10 @@ generators:
     hdr_preamble: |
       #include "enum_pairs.h"
     hdr: |
+      // {{name}}
       template<> const EnumPairs<{{enum.type}}> enum_pairs();
     src: |
+      // {{name}}
       template<> const EnumPairs<{{enum.type}}> enum_pairs()
       {
           static const EnumAndName<{{enum.type}}> vals[] = {
@@ -121,7 +123,7 @@ generators:
 )",
     {{"", ""},
      {R"(#define C4_ENUM(...)
-C4_ENUM(foo)
+C4_ENUM(foo, bar: baz)
 typedef enum {FOO, BAR} MyEnum_e;
 )"}
     });

@@ -69,12 +69,21 @@ void Entity::create_prop_tree(c4::yml::NodeRef n) const
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-inline bool is_idchar(char c)
+
+void Tag::_parse_annotations()
 {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-        || (c == '_' || c == '-' || c == '~' || c == '$');
+    csubstr s = find_pair(m_str, '(', ')', /*allow_nested*/true);
+    C4_ASSERT(s.len >= 2 && s.begins_with('(') && s.ends_with(')'));
+    m_spec_str = s.range(1, s.len-1).trim(' ');
+    _normalize_map_str();
+    m_annotations.clear();
+    m_annotations.clear_arena();
+    if(m_spec_str.empty()) return;
+    substr yml_src = m_annotations.copy_to_arena(m_spec_str);
+    c4::yml::parse(yml_src, &m_annotations);
 }
 
+/** get the string delimited by possibly nested open-close pairs */
 csubstr find_pair(csubstr s, char open, char close, bool allow_nested)
 {
     size_t b = s.find(open);
@@ -104,17 +113,114 @@ csubstr find_pair(csubstr s, char open, char close, bool allow_nested)
     return csubstr();
 }
 
-
-void Tag::parse_annotations()
+csubstr find_pair_esc(csubstr s, const char open_close, const char escape)
 {
-    csubstr s = find_pair(m_str, '(', ')', /*allow_nested*/true);
-    C4_ASSERT(s.len >= 2 && s.begins_with('(') && s.ends_with(')'));
-    m_spec_str = s.range(1, s.len-1).trim(' ');
-    m_annotations.clear();
+    size_t b = s.find(open_close);
+    if(b == csubstr::npos) return csubstr();
+    size_t nest_level = 0;
+    for(size_t i = b; i < s.len; ++i)
+    {
+        char c = s.str[i];
+        if(c == escape)
+        {
+            C4_ASSERT(i != 0);
+            if(s.str[i-1] != escape)
+            {
+                return s.range(b, i+1);
+            }
+        }
+    }
+    return csubstr();
+}
+
+bool is_idchar(char c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+        || (c == '_' || c == '-' || c == '~' || c == '$');
+}
+
+csubstr val2keyval_get_key(csubstr s)
+{
+    s = s.trim(' ');
+    C4_CHECK(s[0] != '\'' && s[0] != '"');
+    auto pos = s.find(": "); //! @todo: this may be inside quotes
+    if(pos != csubstr::npos)
+    {
+        // assume it's a keyval
+        return csubstr();
+    }
+    // ok, assume no key, so it's a val
+    for(const char c : s)
+    {
+        C4_CHECK(is_idchar(c));
+    }
+    return s;
+}
+
+/** convert the code with a relaxed map to a strict YAML map so that it can be parsed */
+void Tag::_normalize_map_str()
+{
+    C4_NOT_IMPLEMENTED();
     m_annotations.clear_arena();
-    if(m_spec_str.empty()) return;
-    substr yml_src = m_annotations.copy_to_arena(m_spec_str);
-    c4::yml::parse(yml_src, &m_annotations);
+    // count the needed string size
+    csubstr s = m_spec_str;
+    size_t prev = 0;
+    size_t len = s.len;
+    for(size_t i = 0; i < s.len; ++i)
+    {
+        char c = s[i];
+        // skip commas within special regions
+        if(c == '\'' || c == '"')
+        {
+            csubstr ss = find_pair_esc(s.sub(i), c, '\\');
+            C4_CHECK(!ss.empty());
+            i += ss.len;
+            substr ws = m_annotations.alloc_arena(ss.len);
+            memcpy(ws.str, ss.str, ss.len);
+        }
+        else if(c == '(')
+        {
+            csubstr ss = find_pair(s.sub(i), '(', ')', true);
+            C4_CHECK(!ss.empty());
+            i += ss.len;
+            substr ws = m_annotations.alloc_arena(ss.len);
+            memcpy(ws.str, ss.str, ss.len);
+        }
+        else if(c == '[')
+        {
+            csubstr ss = find_pair(s.sub(i), '[', ']', true);
+            C4_CHECK(!ss.empty());
+            i += ss.len;
+            substr ws = m_annotations.alloc_arena(ss.len);
+            memcpy(ws.str, ss.str, ss.len);
+        }
+        else if(c == ',')
+        {
+            C4_ASSERT(i != 0);
+            csubstr ss = s.range(prev, i);
+            if(ss.empty()) break;
+            ss = val2keyval_get_key(ss);
+            prev = i+1;
+            if(ss.empty()) continue;
+            substr ws = m_annotations.alloc_arena(ss.len + 2 + 1);
+            cat(ws, ss, ": 1,");
+            continue;
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
+void TaggedEntity::create_prop_tree(c4::yml::NodeRef n) const
+{
+    n |= yml::MAP;
+    m_tag.create_prop_tree(n["tag"]);
+    auto a = n["annot"];
+    a |= yml::MAP;
+    m_tag.m_annotations.rootref().duplicate_children(a, a.last_child());
+    Entity::create_prop_tree(n);
 }
 
 

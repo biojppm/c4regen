@@ -49,7 +49,7 @@ public:
 
 public:
 
-    template <class SourceFileNameCollection>
+    template<class SourceFileNameCollection>
     void gencode(SourceFileNameCollection c$$ collection, const char* db_dir=nullptr, const char* const* flags=nullptr, size_t num_flags=0)
     {
         ast::CompilationDb db(db_dir);
@@ -79,7 +79,7 @@ public:
         m_writer.end_files();
     }
 
-    template <class SourceFileNameCollection>
+    template<class SourceFileNameCollection>
     void print_output_filenames(SourceFileNameCollection c$$ collection)
     {
         Writer::set_type workspace;
@@ -97,7 +97,7 @@ private:
 
     void _load_config_file(const char* file_name);
 
-    template< class GeneratorT >
+    template<class GeneratorT>
     void _loadgen(c4::yml::NodeRef const& n, std::vector<GeneratorT> *gens)
     {
         gens->emplace_back();

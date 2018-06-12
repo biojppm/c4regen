@@ -93,10 +93,11 @@ struct Tag : public Entity
     void init(astEntityRef e) override final
     {
         this->Entity::init(e);
-        parse_annotations();
+        _parse_annotations();
     }
 
-    void parse_annotations();
+    void _parse_annotations();
+    void _normalize_map_str();
 };
 
 
@@ -112,6 +113,8 @@ struct TaggedEntity : public Entity
         ast::Entity e{tag, tag_parent, m_tu, m_index};
         m_tag.init(e);
     }
+
+    virtual void create_prop_tree(c4::yml::NodeRef root) const override;
 };
 
 
