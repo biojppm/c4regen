@@ -107,17 +107,17 @@ generators:
       #include "enum_pairs.h"
     hdr: |
       // {{name}}
-      template<> const EnumPairs<{{enum.type}}> enum_pairs();
+      template<> const EnumPairs<{{type}}> enum_pairs();
     src: |
       // {{name}}
-      template<> const EnumPairs<{{enum.type}}> enum_pairs()
+      template<> const EnumPairs<{{type}}> enum_pairs()
       {
-          static const EnumAndName<{{enum.type}}> vals[] = {
-              {% for e in enum.symbols %}
+          static const EnumAndName<{{type}}> vals[] = {
+              {% for e in symbols %}
               { {{e.name}}, "{{e.name}}"},
               {% endfor %}
           };
-          EnumPairs<{{enum.type}}> r(vals);
+          EnumPairs<{{type}}> r(vals);
           return r;
       }
 )",

@@ -19,9 +19,7 @@ struct EnumSymbol : public TaggedEntity
     size_t   m_val_size;
 
     void init_symbol(astEntityRef r, Enum *e);
-
-
-
+    void create_prop_tree(c4::yml::NodeRef n) const override;
 };
 
 
@@ -34,7 +32,7 @@ struct Enum : public TaggedEntity
     DataType m_underlying_type;
 
     virtual void init(astEntityRef e) override;
-
+    virtual void create_prop_tree(c4::yml::NodeRef n) const override;
 };
 
 

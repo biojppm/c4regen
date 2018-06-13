@@ -134,6 +134,8 @@ struct Generator : public CodeInstances<CodeTemplate>
     {
         ch->m_generator = this;
         ch->m_originator = &o;
+        root.clear_children();
+        root |= yml::MAP;
         o.create_prop_tree(root);
         render(root, ch);
     }
