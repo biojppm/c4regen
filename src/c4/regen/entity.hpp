@@ -102,7 +102,7 @@ struct Tag : public Entity
     }
 
     void _parse_annotations();
-    void _normalize_map_str();
+    substr _normalize_map_str(csubstr s);
 };
 
 

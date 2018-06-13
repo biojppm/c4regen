@@ -77,19 +77,6 @@ void Entity::create_prop_tree(c4::yml::NodeRef n) const
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-void Tag::_parse_annotations()
-{
-    csubstr s = find_pair(m_str, '(', ')', /*allow_nested*/true);
-    C4_ASSERT(s.len >= 2 && s.begins_with('(') && s.ends_with(')'));
-    m_spec_str = s.range(1, s.len-1).trim(' ');
-    _normalize_map_str();
-    m_annotations.clear();
-    m_annotations.clear_arena();
-    if(m_spec_str.empty()) return;
-    substr yml_src = m_annotations.copy_to_arena(m_spec_str);
-    c4::yml::parse(yml_src, &m_annotations);
-}
-
 /** get the string delimited by possibly nested open-close pairs */
 csubstr find_pair(csubstr s, char open, char close, bool allow_nested)
 {
@@ -164,15 +151,26 @@ csubstr val2keyval_get_key(csubstr s)
     return s;
 }
 
-/** convert the code with a relaxed map to a strict YAML map so that it can be parsed */
-void Tag::_normalize_map_str()
+void Tag::_parse_annotations()
 {
-    C4_NOT_IMPLEMENTED();
+    csubstr s = find_pair(m_str, '(', ')', /*allow_nested*/true);
+    C4_ASSERT(s.len >= 2 && s.begins_with('(') && s.ends_with(')'));
+    m_spec_str = s.range(1, s.len-1).trim(' ');
+    m_annotations.clear();
     m_annotations.clear_arena();
+    if(m_spec_str.empty()) return;
+    substr yml_src = _normalize_map_str(m_spec_str);
+    m_spec_str = yml_src;
+    c4::yml::parse(yml_src, &m_annotations);
+}
+
+/** convert the code with a relaxed map to a strict YAML map so that it can be parsed */
+substr Tag::_normalize_map_str(csubstr s)
+{
     // count the needed string size
-    csubstr s = m_spec_str;
     size_t prev = 0;
-    size_t len = s.len;
+    bool needs_brackets = ! s.begins_with('{');
+    if(needs_brackets) m_annotations.copy_to_arena("{");
     for(size_t i = 0; i < s.len; ++i)
     {
         char c = s[i];
@@ -184,6 +182,7 @@ void Tag::_normalize_map_str()
             i += ss.len;
             substr ws = m_annotations.alloc_arena(ss.len);
             memcpy(ws.str, ss.str, ss.len);
+            prev = i;
         }
         else if(c == '(')
         {
@@ -192,6 +191,7 @@ void Tag::_normalize_map_str()
             i += ss.len;
             substr ws = m_annotations.alloc_arena(ss.len);
             memcpy(ws.str, ss.str, ss.len);
+            prev = i;
         }
         else if(c == '[')
         {
@@ -200,6 +200,7 @@ void Tag::_normalize_map_str()
             i += ss.len;
             substr ws = m_annotations.alloc_arena(ss.len);
             memcpy(ws.str, ss.str, ss.len);
+            prev = i;
         }
         else if(c == ',')
         {
@@ -209,11 +210,17 @@ void Tag::_normalize_map_str()
             ss = val2keyval_get_key(ss);
             prev = i+1;
             if(ss.empty()) continue;
-            substr ws = m_annotations.alloc_arena(ss.len + 2 + 1);
+            substr ws = m_annotations.alloc_arena(ss.len + 2 + 1 + 1);
             cat(ws, ss, ": 1,");
-            continue;
         }
     }
+    if(prev < s.len)
+    {
+        substr ws = m_annotations.alloc_arena(s.len - prev);
+        memcpy(ws.str, s.str + prev, s.len - prev);
+    }
+    if(needs_brackets) m_annotations.copy_to_arena("}");
+    return m_annotations.arena();
 }
 
 //-----------------------------------------------------------------------------
@@ -223,10 +230,13 @@ void Tag::_normalize_map_str()
 void TaggedEntity::create_prop_tree(c4::yml::NodeRef n) const
 {
     n |= yml::MAP;
-    m_tag.create_prop_tree(n["tag"]);
-    auto a = n["annot"];
-    a |= yml::MAP;
-    m_tag.m_annotations.rootref().duplicate_children(a, a.last_child());
+    if(is_tagged())
+    {
+        m_tag.create_prop_tree(n["tag"]);
+        auto a = n["annot"];
+        a |= yml::MAP;
+        m_tag.m_annotations.rootref().duplicate_children(a, a.last_child());
+    }
     Entity::create_prop_tree(n);
 }
 
