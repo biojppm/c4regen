@@ -21,7 +21,12 @@ void Entity::init(astEntityRef e)
     m_parent = e.parent;
     m_region.init_region(*e.idx, e.cursor);
     m_str = m_region.get_str(to_csubstr(e.tu->m_contents));
-    m_name = _get_display_name();
+    m_name = to_csubstr(m_cursor.display_name(*m_index));
+    m_spelling = to_csubstr(m_cursor.spelling(*m_index));
+    m_type = to_csubstr(m_cursor.type_spelling(*m_index));
+    m_brief_comment = to_csubstr(m_cursor.brief_comment(*m_index));
+    m_raw_comment = to_csubstr(m_cursor.raw_comment(*m_index));
+    if(m_name.empty()) m_name = _get_spelling();
 
     m_tpl_args.clear();
     if(m_cursor.is_tpl())
@@ -38,11 +43,11 @@ void Entity::create_prop_tree(c4::yml::NodeRef n) const
 {
     n |= yml::MAP;
     n["name"] = m_name;
-    n["spelling"] = m_cursor.spelling(*m_index);
-    n["kind"] = m_cursor.kind_spelling(*m_index);
-    n["type"] = m_cursor.type_spelling(*m_index);
-    n["brief_comment"] = m_cursor.brief_comment(*m_index);
-    n["raw_comment"] = m_cursor.raw_comment(*m_index);
+    n["spelling"] = m_spelling;
+    n["kind"] = m_kind;
+    n["type"] = m_type;
+    n["brief_comment"] = m_brief_comment;
+    n["raw_comment"] = m_raw_comment;
 
     if(m_cursor.is_tpl())
     {
@@ -60,9 +65,11 @@ void Entity::create_prop_tree(c4::yml::NodeRef n) const
     n["region"]["start"] |= yml::MAP;
     n["region"]["start"]["line"] << m_region.m_start.line;
     n["region"]["start"]["column"] << m_region.m_start.column;
+    n["region"]["start"]["offset"] << m_region.m_start.offset;
     n["region"]["end"] |= yml::MAP;
     n["region"]["end"]["line"] << m_region.m_end.line;
     n["region"]["end"]["column"] << m_region.m_end.column;
+    n["region"]["end"]["offset"] << m_region.m_start.offset;
 }
 
 

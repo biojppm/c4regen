@@ -52,6 +52,11 @@ struct Entity
     ast::Region              m_region;
     csubstr                  m_str;
     csubstr                  m_name;
+    csubstr                  m_spelling;
+    csubstr                  m_kind;
+    csubstr                  m_type;
+    csubstr                  m_brief_comment;
+    csubstr                  m_raw_comment;
 
     bool                     m_is_tpl;
     std::vector<TemplateArg> m_tpl_args;
