@@ -186,6 +186,7 @@ protected:
         _clear(&m_contributors);
     }
 
+    void _extract_filenames(SourceFile c$$ src);
 };
 
 
@@ -197,6 +198,7 @@ struct WriterStdout : public WriterBase
     void _begin_file(SourceFile c$$ src) override
     {
         _clear();
+        _extract_filenames(src);
     }
     void _end_file(SourceFile c$$ src) override
     {

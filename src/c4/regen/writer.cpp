@@ -146,6 +146,8 @@ void WriterBase::_append_to(csubstr s, Destination_e dst, CodeInstances<std::str
 
 void WriterBase::_append_code_chunk(CodeChunk c$$ ch, c4::tpl::Rope c$$ r, Destination_e dst)
 {
+    if(r.str_size() == 0) return;
+
     // linearize the chunk's rope into a temporary buffer
     r.chain_all_resize(&m_tpl_ws_str);
 
@@ -175,14 +177,20 @@ void WriterBase::_append_code_chunk(CodeChunk c$$ ch, c4::tpl::Rope c$$ r, Desti
 
 void WriterBase::_render_files()
 {
+    const bool hdr_empty = m_file_contents.m_hdr.empty() && m_file_preambles.m_hdr.empty();
+    const bool inl_empty = m_file_contents.m_inl.empty() && m_file_preambles.m_inl.empty();
+    const bool src_empty = m_file_contents.m_src.empty() && m_file_preambles.m_src.empty();
+
+    if(hdr_empty && inl_empty && src_empty) return;
+
     m_tpl_ws_tree.clear();
     m_tpl_ws_tree.clear_arena();
     c4::yml::NodeRef root = m_tpl_ws_tree.rootref();
     root |= c4::yml::MAP;
 
-    root["has_hdr"] << ( ! m_file_contents.m_hdr.empty());
-    root["has_inl"] << ( ! m_file_contents.m_inl.empty());
-    root["has_src"] << ( ! m_file_contents.m_src.empty());
+    root["has_hdr"] << ( ! hdr_empty);
+    root["has_inl"] << ( ! inl_empty);
+    root["has_src"] << ( ! src_empty);
     c4::yml::NodeRef hdr = root["hdr"];
     c4::yml::NodeRef inl = root["inl"];
     c4::yml::NodeRef src = root["src"];
@@ -192,9 +200,9 @@ void WriterBase::_render_files()
     hdr["preamble"] = to_csubstr(m_file_preambles.m_hdr);
     inl["preamble"] = to_csubstr(m_file_preambles.m_inl);
     src["preamble"] = to_csubstr(m_file_preambles.m_src);
-    hdr["gencode"] = to_csubstr(m_file_contents.m_hdr);
-    inl["gencode"] = to_csubstr(m_file_contents.m_inl);
-    src["gencode"] = to_csubstr(m_file_contents.m_src);
+    hdr["gencode"]  = to_csubstr(m_file_contents.m_hdr);
+    inl["gencode"]  = to_csubstr(m_file_contents.m_inl);
+    src["gencode"]  = to_csubstr(m_file_contents.m_src);
     hdr["include_guard"] = _incguard(to_csubstr(m_file_names.m_hdr));
     inl["include_guard"] = _incguard(to_csubstr(m_file_names.m_inl));
     //src["include_guard"] = _incguard(to_csubstr(m_file_names.m_src));
@@ -222,6 +230,7 @@ void WriterBase::_render_files()
 
 csubstr WriterBase::_incguard(csubstr filename)
 {
+    C4_ASSERT(filename.not_empty());
     substr incg = m_tpl_ws_tree.alloc_arena(filename.len + 7);
     cat(incg, filename, "_GUARD_");
     for(auto $$ c : incg)
@@ -232,6 +241,38 @@ csubstr WriterBase::_incguard(csubstr filename)
     return incg;
 }
 
+void WriterBase::_extract_filenames(SourceFile c$$ src)
+{
+    csubstr name = src.m_name;
+    C4_CHECK(name.not_empty());
+
+    if(m_source_root.empty())
+    {
+        name = name.basename();
+    }
+    else
+    {
+        name = name.sub(m_source_root.size());
+    }
+
+    auto $$ tmp = m_file_names.m_src;
+    tmp.assign(name.begin(), name.end());
+    substr wname = to_substr(tmp);
+    for(size_t i = 0; i < wname.len; ++i)
+    {
+        char $$ c = wname.str[i];
+        if(c4::fs::is_sep(i, wname.str, wname.len)) c = '/';
+        else c = std::tolower(c);
+    }
+
+    C4_ASSERT(is_hdr(wname) || is_src(wname));
+    csubstr ext = wname.pop_right('.');
+    csubstr name_wo_ext = wname.gpop_left('.');
+
+    catrs(&m_file_names.m_hdr, name_wo_ext, ".c4gen.hpp");
+    catrs(&m_file_names.m_inl, name_wo_ext, ".c4gen.def.hpp");
+    catrs(&m_file_names.m_src, name_wo_ext, ".c4gen.cpp");
+}
 
 } // namespace regen
 } // namespace c4
