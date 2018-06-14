@@ -8,6 +8,12 @@
 
 namespace c4 {
 namespace regen {
+    
+bool is_hdr(csubstr filename);
+bool is_src(csubstr filename);
+
+void add_hdr(const char* ext);
+void add_src(const char* ext);
 
 
 //-----------------------------------------------------------------------------
@@ -135,10 +141,15 @@ struct WriterBase
     c4::tpl::Rope m_tpl_ws_rope;
     std::string   m_tpl_ws_str;
 
+    std::string   m_source_root;
+
 public:
+
 
     virtual ~WriterBase() = default;
     virtual void load(c4::yml::NodeRef const n);
+
+    void set_source_root(csubstr r) { m_source_root.assign(r.begin(), r.end()); }
 
     virtual void extract_filenames(csubstr src_file, set_type $ filenames) = 0;
 
