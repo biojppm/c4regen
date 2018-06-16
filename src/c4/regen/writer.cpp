@@ -235,7 +235,7 @@ csubstr WriterBase::_incguard(csubstr filename)
     cat(incg, filename, "_GUARD_");
     for(auto $$ c : incg)
     {
-        if(c == '.' || c == '/' || c == '\\') c = '_';
+        if(c == '.' || c == '/' || c == '\\' || c == '-') c = '_';
         else c = std::toupper(c);
     }
     return incg;
