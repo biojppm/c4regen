@@ -241,9 +241,8 @@ csubstr WriterBase::_incguard(csubstr filename)
     return incg;
 }
 
-void WriterBase::_extract_filenames(SourceFile c$$ src)
+void WriterBase::_extract_filenames(csubstr name)
 {
-    csubstr name = src.m_name;
     C4_CHECK(name.not_empty());
 
     if(m_source_root.empty())

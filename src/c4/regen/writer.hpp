@@ -151,7 +151,13 @@ public:
 
     void set_source_root(csubstr r) { m_source_root.assign(r.begin(), r.end()); }
 
-    virtual void extract_filenames(csubstr src_file, set_type $ filenames) = 0;
+    virtual void extract_filenames(csubstr src_file, set_type $ filenames)
+    {
+        _extract_filenames(src_file);
+        if( ! m_file_names.m_hdr.empty()) filenames->insert(m_file_names.m_hdr);
+        if( ! m_file_names.m_inl.empty()) filenames->insert(m_file_names.m_inl);
+        if( ! m_file_names.m_src.empty()) filenames->insert(m_file_names.m_src);
+    }
 
     void write(SourceFile c$$ src, set_type $ output_names=nullptr);
 
@@ -186,7 +192,7 @@ protected:
         _clear(&m_contributors);
     }
 
-    void _extract_filenames(SourceFile c$$ src);
+    void _extract_filenames(csubstr name);
 };
 
 
@@ -198,7 +204,7 @@ struct WriterStdout : public WriterBase
     void _begin_file(SourceFile c$$ src) override
     {
         _clear();
-        _extract_filenames(src);
+        _extract_filenames(src.m_name);
     }
     void _end_file(SourceFile c$$ src) override
     {
@@ -223,11 +229,6 @@ struct WriterStdout : public WriterBase
 /** */
 struct WriterGenFile : public WriterBase
 {
-
-    void extract_filenames(csubstr src_file, set_type $ filenames) override
-    {
-    }
-
 };
 
 
