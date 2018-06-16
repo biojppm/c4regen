@@ -233,9 +233,12 @@ void TaggedEntity::create_prop_tree(c4::yml::NodeRef n) const
     if(is_tagged())
     {
         m_tag.create_prop_tree(n["tag"]);
-        auto a = n["annot"];
-        a |= yml::MAP;
-        m_tag.m_annotations.rootref().duplicate_children(a, a.last_child());
+        if(m_tag.m_spec_str.not_empty())
+        {
+            auto a = n["annot"];
+            a |= yml::MAP;
+            m_tag.m_annotations.rootref().duplicate_children(a, a.last_child());
+        }
     }
     Entity::create_prop_tree(n);
 }
