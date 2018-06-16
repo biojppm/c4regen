@@ -12,12 +12,12 @@ void Enum::init(astEntityRef e)
     m_name = m_type;
     m_underlying_type.m_cxtype = clang_getEnumDeclIntegerType(m_cursor);
 
+    //m_cursor.print_recursive();
+
     struct _symbol_visit_data
     {
         Enum *e;
     } vd{this};
-
-    m_cursor.print_recursive();
 
     auto fn = [](ast::Cursor c, ast::Cursor parent, void *data) {
         auto vd = (_symbol_visit_data const*) data;

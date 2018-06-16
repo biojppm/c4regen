@@ -48,52 +48,6 @@ void Extractor::load(c4::yml::NodeRef n)
 
 //-----------------------------------------------------------------------------
 
-size_t Extractor::extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Entity> *out) const
-{
-    switch(m_type)
-    {
-    case EXTR_ALL:
-    {
-        ast::CursorMatcher matcher{kind, ""};
-        return tu.select(matcher, out);
-    }
-    case EXTR_TAGGED_MACRO:
-    case EXTR_TAGGED_MACRO_ANNOTATED:
-    {
-        // select all macro expansions
-        ast::CursorMatcher matcher{CXCursor_MacroExpansion, to_csubstr(m_tag)};
-        size_t sz = out->size();
-        size_t ret = tu.select(matcher, out);
-        // filter in the specified kind
-        size_t curr = 0;
-        C4_NOT_IMPLEMENTED();
-        /*
-        for(size_t i = 0; i < ret; ++i)
-        {
-            ast::Cursor c = (*out)[sz + i].next_sibling();
-            if(c.kind() == kind)
-            {
-                (*out)[sz + curr] = c;
-                ++curr;
-            }
-        }
-         */
-        if(m_type == EXTR_TAGGED_MACRO_ANNOTATED)
-        {
-            // filter in only annotated occurrences
-            C4_NOT_IMPLEMENTED();
-        }
-        return curr;
-    }
-    default:
-        C4_NOT_IMPLEMENTED();
-    }
-    return false;
-}
-
-
-//-----------------------------------------------------------------------------
-
 Extractor::Data Extractor::extract(c4::ast::Index &idx, c4::ast::Cursor c) const
 {
     Extractor::Data ret;

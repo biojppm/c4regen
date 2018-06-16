@@ -46,7 +46,6 @@ struct Extractor
     std::string m_attr;
 
     void load(c4::yml::NodeRef n);
-    size_t extract(CXCursorKind kind, c4::ast::TranslationUnit const& tu, std::vector<ast::Entity> *out) const;
 
     struct Data
     {
