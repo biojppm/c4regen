@@ -54,8 +54,12 @@ public:
     size_t extract(Generator c$ c$ gens, size_t num_gens);
     void gencode(Generator c$ c$ gens, size_t num_gens, c4::yml::NodeRef workspace);
 
-private:
+    ast::Entity ast_ent(ast::Cursor c, ast::Cursor parent) const
+    {
+        return ast::Entity{c, parent, m_tu, m_index};
+    }
 
+private:
 
     template<class EntityT>
     void _extract(std::vector<EntityT> $ entities, EntityType_e type, Generator c$$ g)
@@ -80,11 +84,7 @@ private:
                 vd->sf->m_chunks.emplace_back();
                 vd->entities->emplace_back();
                 EntityT $$ e = vd->entities->back();
-                ast::Entity ae;
-                ae.tu = vd->sf->m_tu;
-                ae.idx = vd->sf->m_index;
-                ae.cursor = ret.cursor;
-                ae.parent = parent;
+                ast::Entity ae = vd->sf->ast_ent(c, parent);
                 e.init(ae);
                 if(ret.has_tag)
                 {

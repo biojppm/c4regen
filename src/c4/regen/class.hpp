@@ -10,18 +10,16 @@
 namespace c4 {
 namespace regen {
 
-
 struct Class;
-struct Member : public TaggedEntity
+
+
+//-----------------------------------------------------------------------------
+
+struct Member : public Var
 {
     Class c$ m_class;
 
-    virtual void init(astEntityRef e) override
-    {
-        this->TaggedEntity::init(e);
-        m_entity_type = ENT_MEMBER;
-        C4_NOT_IMPLEMENTED();
-    }
+    void init_member(astEntityRef e, Class c$ c);
 };
 
 
@@ -31,12 +29,7 @@ struct Method : public Function
 {
     Class c$ m_class;
 
-    virtual void init(astEntityRef e) override
-    {
-        this->Function::init(e);
-        m_entity_type = ENT_METHOD;
-        C4_NOT_IMPLEMENTED();
-    }
+    void init_method(astEntityRef e, Class c$ c);
 };
 
 
@@ -47,12 +40,8 @@ struct Class : public TaggedEntity
     std::vector<Member> m_members;
     std::vector<Method> m_methods;
 
-    virtual void init(astEntityRef e) override
-    {
-        this->TaggedEntity::init(e);
-        m_entity_type = ENT_CLASS;
-        C4_NOT_IMPLEMENTED();
-    }
+    void init(astEntityRef e) override;
+    void create_prop_tree(c4::yml::NodeRef n) const override;
 };
 
 

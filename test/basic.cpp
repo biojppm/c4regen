@@ -92,10 +92,11 @@ void test_regen_exec(const char *cfg_yml_buf, std::initializer_list<SrcAndGen> s
 }
 
 
-TEST(foo, baz)
+TEST(enums, basic)
 {
     test_regen_exec(R"(
-writer: stdout # one of: stdout, samefile, genfile, gengroup, singlefile
+# one of: stdout, samefile, genfile, gengroup, singlefile
+writer: gengroup
 
 generators:
   -
@@ -125,6 +126,58 @@ generators:
      {R"(#define C4_ENUM(...)
 C4_ENUM(foo, bar: baz)
 typedef enum {FOO, BAR} MyEnum_e;
+)"}
+    });
+}
+
+
+
+TEST(classes, basic)
+{
+    test_regen_exec(R"(
+writer: gengroup
+generators:
+  -
+    name: class_members
+    type: class # one of: enum, class, function
+    extract:
+      macro: C4_CLASS
+    hdr: |
+      // {{name}}
+      void show({{name}} const& obj);
+    src_preamble: |
+      #include <iostream>
+    src: |
+      // {{name}}
+      void show({{type}} const& obj);
+      {
+          {% for m in members %}
+          std::cout << "member: '{{m.name}}' of type '{{m.type}}': value=" << obj.{{m.name}} << "\n";
+          {% endfor %}
+          {% for m in methods %}
+          std::cout << "method: '{{m.name}}' of type '{{m.type}}'\n";
+          {% endfor %}
+      }
+)",
+    {{"", ""},
+     {R"(#define C4_CLASS(...)
+C4_CLASS()
+struct foo
+{
+  int a, b, c;
+  float x, y, z;
+
+  void some_method(foo const& that);
+};
+
+C4_CLASS()
+struct bar
+{
+  int za, zb, zc;
+  float zx, zy, zz;
+
+  void some_other_method(bar const& that);
+};
 )"}
     });
 }
