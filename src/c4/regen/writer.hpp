@@ -237,8 +237,18 @@ struct WriterGenFile : public WriterBase
 struct WriterGenGroup : public WriterBase
 {
 
-    void extract_filenames(csubstr src_file, set_type $ filenames) override
+    void _begin_file(SourceFile c$$ src) override
     {
+        _clear();
+        _extract_filenames(src.m_name);
+    }
+    void _end_file(SourceFile c$$ src) override
+    {
+#define _c4svfile(which) c4::fs::file_put_contents(m_file_names.which.c_str(), m_file_contents.which.data(), m_file_contents.which.size());
+        _c4svfile(m_hdr)
+        _c4svfile(m_inl)
+        _c4svfile(m_src)
+#undef _c4svfile
     }
 
 };
