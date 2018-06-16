@@ -234,7 +234,7 @@ public:
 inline void print_str(CXString cxs, bool skip_empty=false, const char *fmt="%s")
 {
     const char *s = clang_getCString(cxs);
-    if(strlen(s) || ! skip_empty)
+    if(s && strlen(s) || ! skip_empty)
     {
         printf(fmt, s);
     }
@@ -373,6 +373,24 @@ inline CXChildVisitResult detail::_visit_impl(CXCursor cursor, CXCursor parent, 
             || clang_Cursor_isMacroBuiltin(cursor))
     {
         return CXChildVisit_Continue;
+    }
+    // apparently the conditions above are not enough to filter out builtin
+    // macros such as __cplusplus or _MSC_VER. So try to catch those here.
+    else if(cursor.kind == CXCursor_MacroDefinition)
+    {
+        // is there a smarter way to do this?
+        CXSourceLocation loc = clang_getCursorLocation(cursor);
+        CXFile f;
+        unsigned line, col, offs;
+        clang_getExpansionLocation(loc, &f, &line, &col, &offs);
+        CXString s = clang_getFileName(f);
+        const char *cs = clang_getCString(s);
+        if(cs == nullptr)
+        {
+            clang_disposeString(s);
+            return CXChildVisit_Continue;
+        }
+        clang_disposeString(s);
     }
     return vd->visitor(cursor, parent, vd->data);
 }
