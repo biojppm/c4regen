@@ -30,11 +30,11 @@ inline bool valid_cmd(csubstr cmd)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-inline int exec(int argc, const char *argv[], bool with_exe_name=false)
+inline int exec(int argc, const char *argv[], bool skip_exe_name=false)
 {
     using namespace c4;
 
-    if(with_exe_name)
+    if(skip_exe_name)
     {
         ++argc;
         ++argv;

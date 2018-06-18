@@ -49,22 +49,7 @@ inline bool is_integral_signed(CXTypeKind t)
 
 struct Cursor;
 using visitor_pfn = CXChildVisitResult (*)(Cursor c, Cursor parent, void *data);
-
-namespace detail {
-
-struct _visitor_data
-{
-    visitor_pfn visitor;
-    void *data;
-    bool same_unit_only;
-    CXTranslationUnit transunit;
-};
-
-inline CXChildVisitResult _visit_impl(CXCursor cursor, CXCursor parent, CXClientData data);
-
-} // namespace detail
-
-inline void visit_children(Cursor root, visitor_pfn visitor, void *data=nullptr, bool same_unit_only=true);
+void visit_children(Cursor root, visitor_pfn visitor, void *data=nullptr, bool same_unit_only=true);
 
 
 //-----------------------------------------------------------------------------
@@ -234,7 +219,7 @@ public:
 inline void print_str(CXString cxs, bool skip_empty=false, const char *fmt="%s")
 {
     const char *s = clang_getCString(cxs);
-    if(s && strlen(s) || ! skip_empty)
+    if(s && (strlen(s) || ! skip_empty))
     {
         printf(fmt, s);
     }
@@ -316,13 +301,14 @@ struct Cursor : public CXCursor
     Cursor semantic_parent() const { return Cursor(clang_getCursorSemanticParent(*this)); }
     Cursor lexical_parent() const { return Cursor(clang_getCursorLexicalParent(*this)); }
 
-    Cursor next_sibling() const;
     Cursor first_child() const;
+    Cursor next_sibling() const;
 
     Location location(Index &idx) const { return Location(idx, *this); }
     Region region(Index &idx) const { return Region(idx, *this); }
 
-    bool is_same(Cursor c) const { return clang_equalCursors(*this, c) != 0; }
+    bool is_null() const { return clang_equalCursors(*this, clang_getNullCursor()); }
+    bool is_same(const Cursor c) const { return clang_hashCursor(*this) == clang_hashCursor(c); }
 
     unsigned hash() const { return clang_hashCursor(*this); }
     CXCursorKind kind() const { return clang_getCursorKind(*this); }
@@ -359,48 +345,13 @@ struct Cursor : public CXCursor
     const char*   raw_comment(Index &idx) const { return idx.store_str(clang_Cursor_getRawCommentText(*this)); }
     const char* brief_comment(Index &idx) const { return idx.store_str(clang_Cursor_getBriefCommentText(*this)); }
 
-    void print_recursive(unsigned indent=0) const;
-    void print(unsigned indent=0) const;
+    void print_recursive(const char* msg=nullptr, unsigned indent=0) const;
+    void print(const char* msg=nullptr, unsigned indent=0) const;
 };
 
 
-//-----------------------------------------------------------------------------
 
-inline CXChildVisitResult detail::_visit_impl(CXCursor cursor, CXCursor parent, CXClientData data)
-{
-    _visitor_data *C4_RESTRICT vd = reinterpret_cast<_visitor_data*>(data);
-    if((vd->same_unit_only && (clang_Cursor_getTranslationUnit(cursor) != vd->transunit))
-            || clang_Cursor_isMacroBuiltin(cursor))
-    {
-        return CXChildVisit_Continue;
-    }
-    // apparently the conditions above are not enough to filter out builtin
-    // macros such as __cplusplus or _MSC_VER. So try to catch those here.
-    else if(cursor.kind == CXCursor_MacroDefinition)
-    {
-        // is there a smarter way to do this?
-        CXSourceLocation loc = clang_getCursorLocation(cursor);
-        CXFile f;
-        unsigned line, col, offs;
-        clang_getExpansionLocation(loc, &f, &line, &col, &offs);
-        CXString s = clang_getFileName(f);
-        const char *cs = clang_getCString(s);
-        if(cs == nullptr)
-        {
-            clang_disposeString(s);
-            return CXChildVisit_Continue;
-        }
-        clang_disposeString(s);
-    }
-    return vd->visitor(cursor, parent, vd->data);
-}
-
-
-inline void visit_children(Cursor root, visitor_pfn visitor, void *data, bool same_unit_only)
-{
-    detail::_visitor_data vd{visitor, data, same_unit_only, clang_Cursor_getTranslationUnit(root)};
-    clang_visitChildren(root, &detail::_visit_impl, &vd);
-}
+void visit_children(Cursor root, visitor_pfn visitor, void *data, bool same_unit_only);
 
 
 //-----------------------------------------------------------------------------

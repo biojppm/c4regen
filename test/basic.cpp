@@ -64,6 +64,38 @@ int main(int argc, char *argv[]) { return 0; }
     EXPECT_EQ(ws.size(), 1);
 }
 
+TEST(ast, first_child)
+{
+    test_unit tu(R"(#define C4_ENUM(...)
+C4_ENUM(foo, bar: baz)
+typedef enum {FOO, BAR} MyEnum_e;
+)");
+
+    clang_visitChildren(tu.unit.root(), [](CXCursor c, CXCursor parent, void *data) {
+        Cursor(c).print("crl");
+        return CXChildVisit_Recurse;
+    }, nullptr);
+
+    ast::Cursor r = tu.unit.root();
+    ast::Cursor c0 = r.first_child();
+    ast::Cursor c1 = c0.next_sibling();
+    ast::Cursor c2 = c1.next_sibling();
+    ast::Cursor c20 = c2.first_child();
+    ast::Cursor c21 = c20.next_sibling();
+    ast::Cursor c22 = c21.next_sibling();
+    ast::Cursor c3 = c2.next_sibling();
+    ast::Cursor c4 = c3.next_sibling();
+
+    EXPECT_EQ(c0.kind(), CXCursor_MacroDefinition);
+    EXPECT_EQ(c1.kind(), CXCursor_MacroExpansion);
+    EXPECT_EQ(c2.kind(), CXCursor_EnumDecl);
+    EXPECT_EQ(c20.kind(), CXCursor_EnumConstantDecl);
+    EXPECT_EQ(c21.kind(), CXCursor_EnumConstantDecl);
+    EXPECT_TRUE(c22.is_null());
+    EXPECT_TRUE(c3.kind(), CXCursor_TypedefDecl);
+    EXPECT_TRUE(c4.is_null());
+}
+
 
 struct SrcAndGen
 {
@@ -149,7 +181,7 @@ generators:
       #include <iostream>
     src: |
       // {{name}}
-      void show({{type}} const& obj);
+      void show({{name}} const& obj);
       {
           {% for m in members %}
           std::cout << "member: '{{m.name}}' of type '{{m.type}}': value=" << obj.{{m.name}} << "\n";

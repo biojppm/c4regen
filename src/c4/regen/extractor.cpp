@@ -66,6 +66,8 @@ Extractor::Data Extractor::extract(c4::ast::Index &idx, c4::ast::Cursor c) const
             {
                 ret.extracted = true;
                 ret.cursor = c.next_sibling();
+                C4_CHECK( ! ret.cursor.is_null());
+                C4_CHECK( ! ret.cursor.is_same(c));
                 ret.tag = c;
                 ret.has_tag = true;
                 return ret;
