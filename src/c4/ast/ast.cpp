@@ -33,13 +33,13 @@ Cursor Cursor::first_child() const
 
 Cursor Cursor::next_sibling() const
 {
+    if(is_null()) return clang_getNullCursor();
     struct _nsibdata
     {
         Cursor this_;
         Cursor next;
         bool   gotit;
-        bool   should_break;
-    } data{*this, clang_getNullCursor(), false, false};
+    } data{*this, clang_getNullCursor(), false};
     Cursor parent = clang_getCursorLexicalParent(*this);
     if(clang_Cursor_isNull(parent))
     {
@@ -56,15 +56,9 @@ Cursor Cursor::next_sibling() const
                 return CXChildVisit_Continue;
             }
         }
-        else if( ! d->should_break)
+        else
         {
             d->next = c;
-            d->should_break = true; // hack to make sure we break
-            return CXChildVisit_Break;
-        }
-        else if(d->gotit && d->should_break)
-        {
-            // clang is still calling after returning break, so renew the vows here
             return CXChildVisit_Break;
         }
         return CXChildVisit_Continue;
@@ -75,12 +69,28 @@ Cursor Cursor::next_sibling() const
 
 void Cursor::print_recursive(const char* msg, unsigned indent) const
 {
-    print(msg, indent);
-    Cursor n = clang_getNullCursor();
-    for(Cursor c = first_child(); !c.is_same(n); c = c.next_sibling())
+    struct _visit_data
     {
-        c.print_recursive(msg, indent+1);
-    }
+        const char *msg_;
+        unsigned indent_;
+        Cursor prev_parent;
+        Cursor prev_child;
+    } vd{msg, indent, clang_getNullCursor(), *this};
+    visit_children(*this, [](Cursor c, Cursor parent, void *data) {
+        auto vd = (_visit_data $) data;
+        if(parent.is_same(vd->prev_child)) 
+        {
+            ++vd->indent_;
+        }
+        else if(c.is_same(vd->prev_parent))
+        {
+            --vd->indent_;
+        }
+        c.print(vd->msg_, vd->indent_);
+        vd->prev_parent = parent;
+        vd->prev_child = c;
+        return CXChildVisit_Recurse;
+    }, &vd);
 }
 
 void Cursor::print(const char* msg, unsigned indent) const
@@ -110,17 +120,37 @@ struct _visitor_data
 {
     visitor_pfn visitor;
     void *data;
-    bool same_unit_only;
     CXTranslationUnit transunit;
+    bool same_unit_only;
+    bool should_break;
 };
 
-inline CXChildVisitResult _visit_impl(CXCursor cursor, CXCursor parent, CXClientData data)
+inline CXChildVisitResult _visit_impl(CXCursor cursor, CXCursor parent, CXClientData data);
+
+} // namespace detail
+
+
+void visit_children(Cursor root, visitor_pfn visitor, void *data, bool same_unit_only)
+{
+    detail::_visitor_data vd{visitor, data, clang_Cursor_getTranslationUnit(root), same_unit_only, false};
+    clang_visitChildren(root, &detail::_visit_impl, &vd);
+}
+
+
+inline CXChildVisitResult detail::_visit_impl(CXCursor cursor, CXCursor parent, CXClientData data)
 {
     _visitor_data *C4_RESTRICT vd = reinterpret_cast<_visitor_data*>(data);
+    //printf("fdx: "); Cursor ccc = cursor; ccc.print("before filter");
+    if(vd->should_break)
+    {
+        // clang is still calling after returning break, so renew the vows here
+        return CXChildVisit_Break;
+    }
     // skip builtin cursors or cursors from other translation units
     if((vd->same_unit_only && (clang_Cursor_getTranslationUnit(cursor) != vd->transunit))
             || clang_Cursor_isMacroBuiltin(cursor))
     {
+        //printf("skip diff unit....\n");
         return CXChildVisit_Continue;
     }
     // apparently the conditions above are not enough to filter out builtin
@@ -137,21 +167,21 @@ inline CXChildVisitResult _visit_impl(CXCursor cursor, CXCursor parent, CXClient
         if(cs == nullptr)
         {
             clang_disposeString(s);
+            //printf("skip builtin....\n");
             return CXChildVisit_Continue;
         }
         clang_disposeString(s);
     }
-    enum CXChildVisitResult ret = vd->visitor(cursor, parent, vd->data);
+    //printf("after filter, calling\n");
+    auto ret = vd->visitor(cursor, parent, vd->data);
+    //printf("call done!\n");
+    if(ret == CXChildVisit_Break)
+    {
+        // hack to make sure we break
+        //printf("break this!\n");
+        vd->should_break = true;
+    }
     return ret;
-}
-
-} // namespace detail
-
-
-void visit_children(Cursor root, visitor_pfn visitor, void *data, bool same_unit_only)
-{
-    detail::_visitor_data vd{visitor, data, same_unit_only, clang_Cursor_getTranslationUnit(root)};
-    clang_visitChildren(root, &detail::_visit_impl, &vd);
 }
 
 } // namespace ast
