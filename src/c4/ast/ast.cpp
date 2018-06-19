@@ -109,6 +109,25 @@ void Cursor::print(const char* msg, unsigned indent) const
     printf("\n");
 }
 
+Cursor Cursor::tag_subject() const
+{
+    C4_CHECK(kind() == CXCursor_MacroExpansion);
+    CXSourceRange  ext = clang_getCursorExtent(*this);
+    CXSourceLocation loc = clang_getRangeEnd(ext);
+    CXFile file;
+    unsigned line, col, offs;
+    clang_getExpansionLocation(loc, &file, &line, &col, &offs);
+    CXTranslationUnit tu = clang_Cursor_getTranslationUnit(*this);
+    CXCursor ret = clang_getNullCursor();
+    int num_tries = 0;
+    do {
+        C4_CHECK(num_tries++ < 1024);
+        ++offs;
+        CXSourceLocation lookup = clang_getLocationForOffset(tu, file, ++offs);
+        ret = clang_getCursor(tu, lookup);
+    } while(clang_Cursor_isNull(ret) || ret.kind == CXCursor_NoDeclFound);
+    return ret;
+}
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------

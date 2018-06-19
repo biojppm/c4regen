@@ -347,6 +347,8 @@ struct Cursor : public CXCursor
 
     void print_recursive(const char* msg=nullptr, unsigned indent=0) const;
     void print(const char* msg=nullptr, unsigned indent=0) const;
+
+    Cursor tag_subject() const;
 };
 
 
