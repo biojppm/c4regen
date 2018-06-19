@@ -64,7 +64,10 @@ int main(int argc, char *argv[]) { return 0; }
     EXPECT_EQ(ws.size(), 1);
 }
 
-TEST(ast, first_child)
+
+//-----------------------------------------------------------------------------
+
+TEST(ast, first_child__next_sibling)
 {
     test_unit tu(R"(#define C4_ENUM(...)
 C4_ENUM(foo, bar: baz)
@@ -84,18 +87,62 @@ typedef enum {FOO, BAR} MyEnum_e;
     ast::Cursor c21 = c20.next_sibling();
     ast::Cursor c22 = c21.next_sibling();
     ast::Cursor c3 = c2.next_sibling();
+    ast::Cursor c30 = c3.first_child();
+    ast::Cursor c300 = c30.first_child();
+    ast::Cursor c301 = c300.next_sibling();
+    ast::Cursor c302 = c301.next_sibling();
+    ast::Cursor c31 = c30.next_sibling();
     ast::Cursor c4 = c3.next_sibling();
 
-    EXPECT_EQ(c0.kind(), CXCursor_MacroDefinition);
-    EXPECT_EQ(c1.kind(), CXCursor_MacroExpansion);
+    EXPECT_EQ(c0.kind(), CXCursor_MacroDefinition); EXPECT_TRUE(c0.first_child().is_null());
+    EXPECT_EQ(c1.kind(), CXCursor_MacroExpansion);  EXPECT_TRUE(c1.first_child().is_null());
     EXPECT_EQ(c2.kind(), CXCursor_EnumDecl);
-    EXPECT_EQ(c20.kind(), CXCursor_EnumConstantDecl);
-    EXPECT_EQ(c21.kind(), CXCursor_EnumConstantDecl);
+    EXPECT_EQ(c20.kind(), CXCursor_EnumConstantDecl); EXPECT_TRUE(c20.first_child().is_null());
+    EXPECT_EQ(c21.kind(), CXCursor_EnumConstantDecl); EXPECT_TRUE(c21.first_child().is_null());
     EXPECT_TRUE(c22.is_null());
-    EXPECT_TRUE(c3.kind(), CXCursor_TypedefDecl);
+    EXPECT_FALSE(c3.is_same(c30));
+    EXPECT_FALSE(c30.is_same(c3));
+    EXPECT_EQ(c3.kind(), CXCursor_TypedefDecl);
+    EXPECT_TRUE(c30.kind(), CXCursor_EnumDecl);
+    EXPECT_TRUE(c300.kind(), CXCursor_EnumConstantDecl); EXPECT_TRUE(c300.first_child().is_null());
+    EXPECT_TRUE(c301.kind(), CXCursor_EnumConstantDecl); EXPECT_TRUE(c301.first_child().is_null());
+    EXPECT_TRUE(c302.is_null());
+    EXPECT_TRUE(c31.kind(), CXCursor_TypedefDecl); // RECURSION!!!
     EXPECT_TRUE(c4.is_null());
+
+	int i = 0;
+	for(Cursor c = r.first_child(); !c.is_null(); c = c.next_sibling(), ++i)
+	{
+		switch(i)
+		{
+        case 0: EXPECT_TRUE(c.is_same(c0)); break;
+        case 1: EXPECT_TRUE(c.is_same(c1)); break;
+        case 2: EXPECT_TRUE(c.is_same(c2)); break;
+        case 3: EXPECT_TRUE(c.is_same(c3)); break;
+        default: GTEST_FAIL(); break;
+		}
+	}
+
+    i = 0;
+	for(Cursor c = c2.first_child(); !c.is_null(); c = c.next_sibling(), ++i)
+	{
+		switch(i)
+		{
+        case 0: EXPECT_TRUE(c.is_same(c20)); break;
+        case 1: EXPECT_TRUE(c.is_same(c21)); break;
+        default: GTEST_FAIL(); break;
+		}
+	}
+
+	for(Cursor c = c3.first_child(); !c.is_null(); c = c.next_sibling())
+	{
+        GTEST_FAIL();
+	}
 }
 
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 
 struct SrcAndGen
 {

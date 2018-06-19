@@ -84,7 +84,7 @@ private:
                 vd->sf->m_chunks.emplace_back();
                 vd->entities->emplace_back();
                 EntityT $$ e = vd->entities->back();
-                ast::Entity ae = vd->sf->ast_ent(c, parent);
+                ast::Entity ae = vd->sf->ast_ent(ret.cursor, parent);
                 e.init(ae);
                 if(ret.has_tag)
                 {

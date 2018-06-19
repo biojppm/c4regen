@@ -26,8 +26,8 @@ size_t SourceFile::extract(Generator c$ c$ gens, size_t num_gens)
 
     // reorder the chunks so that they are in the same order as the originating entities
     std::sort(m_pos.begin(), m_pos.end(), [this](EntityPos c$$ l_, EntityPos c$$ r_){
-            return this->resolve(l_)->m_region < this->resolve(r_)->m_region;
-        });
+        return this->resolve(l_)->m_region < this->resolve(r_)->m_region;
+    });
 
     num_chunks = m_pos.size() - num_chunks;
 

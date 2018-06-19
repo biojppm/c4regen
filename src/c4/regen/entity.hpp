@@ -82,8 +82,9 @@ protected:
  * MY_TAG()
  * struct Foo {};
  *
- * // a tag accepts annotations as (quasi-)YAML code:
- * MY_TAG(x, y, z, a, b: c, d: [e, f, g], h: {i: j, k: l})
+ * // a tag accepts annotations as a YAML map, where valueless
+ * // entries are assumed to be true (ie, value "1"):
+ * MY_TAG(x, y, z, a: 1, b: c, d: [e, f, g], h: {i: j, k: l})
  * struct Bar {};
  *@endcode
  *
