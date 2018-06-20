@@ -49,7 +49,11 @@ struct Class : public TaggedEntity
 
 struct ClassGenerator : public Generator
 {
-    ClassGenerator() : Generator() { m_entity_type = ENT_CLASS; }
+    ClassGenerator() : Generator()
+    {
+        m_entity_type = ENT_CLASS;
+        m_extractor.set_kinds({CXCursor_StructDecl, CXCursor_ClassDecl});
+    }
 };
 
 

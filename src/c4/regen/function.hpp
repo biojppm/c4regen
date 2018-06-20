@@ -35,7 +35,11 @@ struct Function : public TaggedEntity
 /** generate code from free standing functions */
 struct FunctionGenerator : public Generator
 {
-    FunctionGenerator() : Generator() { m_entity_type = ENT_FUNCTION; }
+    FunctionGenerator() : Generator()
+    {
+        m_entity_type = ENT_FUNCTION;
+        m_extractor.set_kinds({CXCursor_FunctionDecl});
+    }
 };
 
 

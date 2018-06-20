@@ -44,8 +44,12 @@ struct Extractor
     ExtractorType_e m_type{EXTR_ALL};
     std::string m_tag;
     std::string m_attr;
+    std::vector<CXCursorKind> m_cursor_kinds;
 
     void load(c4::yml::NodeRef n);
+
+    void set_kinds(std::initializer_list<CXCursorKind> il);
+    bool kind_matches(CXCursorKind k) const;
 
     struct Data
     {
@@ -53,6 +57,7 @@ struct Extractor
         bool extracted, has_tag;
     };
     Extractor::Data extract(c4::ast::Index &idx, c4::ast::Cursor c) const;
+
 };
 
 

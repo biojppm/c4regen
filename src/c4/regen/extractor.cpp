@@ -48,6 +48,26 @@ void Extractor::load(c4::yml::NodeRef n)
 
 //-----------------------------------------------------------------------------
 
+void Extractor::set_kinds(std::initializer_list<CXCursorKind> il)
+{
+    m_cursor_kinds.clear();
+    for(auto k : il)
+    {
+        m_cursor_kinds.emplace_back(k);
+    }
+}
+
+bool Extractor::kind_matches(CXCursorKind k) const
+{
+    for(auto ck : m_cursor_kinds)
+    {
+        if(ck == k) return true;
+    }
+    return false;
+}
+
+//-----------------------------------------------------------------------------
+
 Extractor::Data Extractor::extract(c4::ast::Index &idx, c4::ast::Cursor c) const
 {
     Extractor::Data ret;
@@ -55,22 +75,29 @@ Extractor::Data Extractor::extract(c4::ast::Index &idx, c4::ast::Cursor c) const
     switch(m_type)
     {
     case EXTR_ALL:
-        ret.extracted = true;
-        ret.cursor = c;
-        ret.has_tag = false;
-        return ret;
+        if(kind_matches(c.kind()))
+        {
+            ret.extracted = true;
+            ret.cursor = c;
+            ret.has_tag = false;
+            return ret;
+        }
     case EXTR_TAGGED_MACRO:
         if(c.kind() == CXCursor_MacroExpansion)
         {
             if(c.display_name(idx) == m_tag)
             {
-                ret.extracted = true;
-                ret.cursor = c.tag_subject();
-                C4_CHECK( ! ret.cursor.is_null());
-                C4_CHECK( ! ret.cursor.is_same(c));
-                ret.tag = c;
-                ret.has_tag = true;
-                return ret;
+                ast::Cursor subj = c.tag_subject();
+                if(kind_matches(subj.kind()))
+                {
+                    ret.extracted = true;
+                    ret.cursor = subj;
+                    ret.tag = c;
+                    ret.has_tag = true;
+                    C4_CHECK( ! ret.cursor.is_null());
+                    C4_CHECK( ! ret.cursor.is_same(ret.tag));
+                    return ret;
+                }
             }
         }
         return ret;

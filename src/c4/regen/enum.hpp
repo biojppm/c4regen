@@ -40,7 +40,11 @@ struct Enum : public TaggedEntity
 
 struct EnumGenerator : public Generator
 {
-    EnumGenerator() : Generator() { m_entity_type = ENT_ENUM; }
+    EnumGenerator() : Generator()
+    {
+        m_entity_type = ENT_ENUM;
+        m_extractor.set_kinds({CXCursor_EnumDecl});
+    }
 };
 
 
