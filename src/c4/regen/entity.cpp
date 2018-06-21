@@ -77,56 +77,6 @@ void Entity::create_prop_tree(c4::yml::NodeRef n) const
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
-/** get the string delimited by possibly nested open-close pairs */
-csubstr find_pair(csubstr s, char open, char close, bool allow_nested)
-{
-    size_t b = s.find(open);
-    if(b == csubstr::npos) return csubstr();
-    if( ! allow_nested)
-    {
-        size_t e = s.find(close, b+1);
-        if(e == csubstr::npos) return csubstr();
-        return s.range(b, e);
-    }
-    size_t e, curr = b+1, count = 0;
-    const char both[] = {open, close, '\0'};
-    while((e = s.first_of(both, curr)) != csubstr::npos)
-    {
-        if(s[e] == open)
-        {
-            ++count;
-            curr = e+1;
-        }
-        else if(s[e] == close)
-        {
-            if(count == 0) return s.range(b, e+1);
-            --count;
-            curr = e+1;
-        }
-    }
-    return csubstr();
-}
-
-csubstr find_pair_esc(csubstr s, const char open_close, const char escape)
-{
-    size_t b = s.find(open_close);
-    if(b == csubstr::npos) return csubstr();
-    size_t nest_level = 0;
-    for(size_t i = b; i < s.len; ++i)
-    {
-        char c = s.str[i];
-        if(c == escape)
-        {
-            C4_ASSERT(i != 0);
-            if(s.str[i-1] != escape)
-            {
-                return s.range(b, i+1);
-            }
-        }
-    }
-    return csubstr();
-}
-
 bool is_idchar(char c)
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
@@ -153,7 +103,7 @@ csubstr val2keyval_get_key(csubstr s)
 
 void Tag::_parse_annotations()
 {
-    csubstr s = find_pair(m_str, '(', ')', /*allow_nested*/true);
+    csubstr s = s.pair_range_nested('(', ')');
     C4_ASSERT(s.len >= 2 && s.begins_with('(') && s.ends_with(')'));
     m_spec_str = s.range(1, s.len-1).trim(' ');
     m_annotations.clear();
@@ -167,17 +117,15 @@ void Tag::_parse_annotations()
 /** convert the code with a relaxed map to a strict YAML map so that it can be parsed */
 substr Tag::_normalize_map_str(csubstr s)
 {
-    // count the needed string size
     size_t prev = 0;
     bool needs_brackets = ! s.begins_with('{');
     if(needs_brackets) m_annotations.copy_to_arena("{");
     for(size_t i = 0; i < s.len; ++i)
     {
         char c = s[i];
-        // skip commas within special regions
         if(c == '\'' || c == '"')
         {
-            csubstr ss = find_pair_esc(s.sub(i), c, '\\');
+            csubstr ss = s.sub(i).pair_range_esc(c, '\\');
             C4_CHECK(!ss.empty());
             i += ss.len;
             substr ws = m_annotations.alloc_arena(ss.len);
@@ -186,7 +134,7 @@ substr Tag::_normalize_map_str(csubstr s)
         }
         else if(c == '(')
         {
-            csubstr ss = find_pair(s.sub(i), '(', ')', true);
+            csubstr ss = s.sub(i).pair_range_nested('(', ')');
             C4_CHECK(!ss.empty());
             i += ss.len;
             substr ws = m_annotations.alloc_arena(ss.len);
@@ -195,14 +143,14 @@ substr Tag::_normalize_map_str(csubstr s)
         }
         else if(c == '[')
         {
-            csubstr ss = find_pair(s.sub(i), '[', ']', true);
+            csubstr ss = s.sub(i).pair_range_nested('[', ']');
             C4_CHECK(!ss.empty());
             i += ss.len;
             substr ws = m_annotations.alloc_arena(ss.len);
             memcpy(ws.str, ss.str, ss.len);
             prev = i;
         }
-        else if(c == ',')
+        else if(c == ',') // skip commas within special regions
         {
             C4_ASSERT(i != 0);
             csubstr ss = s.range(prev, i);
