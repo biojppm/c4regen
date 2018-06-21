@@ -76,7 +76,7 @@ private:
         auto visitor = [](ast::Cursor c, ast::Cursor parent, void *data)
         {
             auto vd = (_visitor_data $)data;
-            Extractor::Data ret = vd->gen->m_extractor.extract(*vd->sf->m_index, c);
+            Extractor::Data ret = vd->gen->m_extractor.extract(*vd->sf, c);
             if(ret.extracted)
             {
                 EntityPos pos{vd->gen, vd->type, vd->entities->size()};

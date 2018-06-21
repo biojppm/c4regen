@@ -349,6 +349,7 @@ struct Cursor : public CXCursor
     void print(const char* msg=nullptr, unsigned indent=0) const;
 
     Cursor tag_subject() const;
+    csubstr tag_annotations(csubstr file_contents) const;
 };
 
 

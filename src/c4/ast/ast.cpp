@@ -129,6 +129,22 @@ Cursor Cursor::tag_subject() const
     return ret;
 }
 
+csubstr Cursor::tag_annotations(csubstr file_contents) const
+{
+    C4_CHECK(kind() == CXCursor_MacroExpansion);
+    CXSourceRange  ext = clang_getCursorExtent(*this);
+    CXSourceLocation b = clang_getRangeStart(ext);
+    CXSourceLocation e = clang_getRangeEnd(ext);
+    unsigned boffs, eoffs;
+    clang_getExpansionLocation(b, nullptr, nullptr, nullptr, &boffs);
+    clang_getExpansionLocation(e, nullptr, nullptr, nullptr, &eoffs);
+    csubstr s = file_contents.range(boffs, eoffs);
+    s = s.pair_range_nested('(', ')');
+    C4_CHECK(s.len >= 2 && s.begins_with('(') && s.ends_with(')'));
+    s = s.range(1, s.len-1).trim(' ');
+    return s;
+}
+
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
