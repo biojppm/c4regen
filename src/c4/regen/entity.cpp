@@ -103,7 +103,7 @@ csubstr val2keyval_get_key(csubstr s)
 
 void Tag::_parse_annotations()
 {
-    csubstr s = s.pair_range_nested('(', ')');
+    csubstr s = m_str.pair_range_nested('(', ')');
     C4_ASSERT(s.len >= 2 && s.begins_with('(') && s.ends_with(')'));
     m_spec_str = s.range(1, s.len-1).trim(' ');
     m_annotations.clear();
