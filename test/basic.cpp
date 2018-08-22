@@ -74,10 +74,12 @@ C4_ENUM(foo, bar: baz)
 typedef enum {FOO, BAR} MyEnum_e;
 )");
 
+    /*
     clang_visitChildren(tu.unit.root(), [](CXCursor c, CXCursor parent, void *data) {
         Cursor(c).print("crl");
         return CXChildVisit_Recurse;
     }, nullptr);
+    */
 
     ast::Cursor r = tu.unit.root();
     ast::Cursor c0 = r.first_child();
@@ -110,34 +112,55 @@ typedef enum {FOO, BAR} MyEnum_e;
     EXPECT_TRUE(c31.kind(), CXCursor_TypedefDecl); // RECURSION!!!
     EXPECT_TRUE(c4.is_null());
 
-	int i = 0;
-	for(Cursor c = r.first_child(); !c.is_null(); c = c.next_sibling(), ++i)
-	{
-		switch(i)
-		{
+    int i = 0;
+    for(Cursor c = r.first_child(); c; c = c.next_sibling(), ++i)
+    {
+        switch(i)
+        {
         case 0: EXPECT_TRUE(c.is_same(c0)); break;
         case 1: EXPECT_TRUE(c.is_same(c1)); break;
         case 2: EXPECT_TRUE(c.is_same(c2)); break;
         case 3: EXPECT_TRUE(c.is_same(c3)); break;
         default: GTEST_FAIL(); break;
-		}
-	}
+        }
+    }
+    EXPECT_EQ(i, 4);
 
     i = 0;
-	for(Cursor c = c2.first_child(); !c.is_null(); c = c.next_sibling(), ++i)
-	{
-		switch(i)
-		{
+    for(Cursor c = c2.first_child(); c; c = c.next_sibling(), ++i)
+    {
+        switch(i)
+        {
         case 0: EXPECT_TRUE(c.is_same(c20)); break;
         case 1: EXPECT_TRUE(c.is_same(c21)); break;
         default: GTEST_FAIL(); break;
-		}
-	}
+        }
+    }
+    EXPECT_EQ(i, 2);
 
-	for(Cursor c = c3.first_child(); !c.is_null(); c = c.next_sibling())
-	{
-        GTEST_FAIL();
-	}
+    i = 0;
+    for(Cursor c = c3.first_child(); c; c = c.next_sibling(), ++i)
+    {
+        switch(i)
+        {
+        case 0: EXPECT_TRUE(c.is_same(c30)); break;
+        case 1: EXPECT_TRUE(c.is_same(c31)); break;
+        default: GTEST_FAIL(); break;
+        }
+    }
+    EXPECT_EQ(i, 2);
+
+    i = 0;
+    for(Cursor c = c30.first_child(); c; c = c.next_sibling(), ++i)
+    {
+        switch(i)
+        {
+        case 0: EXPECT_TRUE(c.is_same(c300)); break;
+        case 1: EXPECT_TRUE(c.is_same(c301)); break;
+        default: GTEST_FAIL(); break;
+        }
+    }
+    EXPECT_EQ(i, 2);
 }
 
 //-----------------------------------------------------------------------------

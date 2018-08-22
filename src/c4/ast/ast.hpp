@@ -307,6 +307,7 @@ struct Cursor : public CXCursor
     Location location(Index &idx) const { return Location(idx, *this); }
     Region region(Index &idx) const { return Region(idx, *this); }
 
+    inline operator bool() const { return ! is_null(); }
     bool is_null() const { return clang_equalCursors(*this, clang_getNullCursor()); }
     bool is_same(const Cursor c) const { return clang_hashCursor(*this) == clang_hashCursor(c); }
 
