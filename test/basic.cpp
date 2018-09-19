@@ -1,6 +1,7 @@
 #include <c4/regen/regen.hpp>
 #include <c4/regen/exec.hpp>
 #include <c4/log/log.hpp>
+#include <c4/yml/yml.hpp>
 #include <gtest/gtest.h>
 
 namespace c4 {
@@ -105,11 +106,11 @@ typedef enum {FOO, BAR} MyEnum_e;
     EXPECT_FALSE(c3.is_same(c30));
     EXPECT_FALSE(c30.is_same(c3));
     EXPECT_EQ(c3.kind(), CXCursor_TypedefDecl);
-    EXPECT_TRUE(c30.kind(), CXCursor_EnumDecl);
-    EXPECT_TRUE(c300.kind(), CXCursor_EnumConstantDecl); EXPECT_TRUE(c300.first_child().is_null());
-    EXPECT_TRUE(c301.kind(), CXCursor_EnumConstantDecl); EXPECT_TRUE(c301.first_child().is_null());
+    EXPECT_EQ(c30.kind(), CXCursor_EnumDecl);
+    EXPECT_EQ(c300.kind(), CXCursor_EnumConstantDecl); EXPECT_TRUE(c300.first_child().is_null());
+    EXPECT_EQ(c301.kind(), CXCursor_EnumConstantDecl); EXPECT_TRUE(c301.first_child().is_null());
     EXPECT_TRUE(c302.is_null());
-    EXPECT_TRUE(c31.kind(), CXCursor_TypedefDecl); // RECURSION!!!
+    EXPECT_EQ(c31.kind(), CXCursor_TypedefDecl); // RECURSION!!!
     EXPECT_TRUE(c4.is_null());
 
     int i = 0;
@@ -167,30 +168,93 @@ typedef enum {FOO, BAR} MyEnum_e;
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
+using GenStrs = c4::regen::CodeInstances<std::string>;
+using Triplet = regen::CodeInstances<const char *>;
+
 struct SrcAndGen
 {
+    const char *name;
     const char *src;
-    const char *gen;
+    Triplet gen;
+
+    SrcAndGen(const char *name_, const char* src_, Triplet t) : name(name_), src(src_), gen(t) {}
+    SrcAndGen(const char *name_, const char* src_) : name(name_), src(src_), gen({"", "", ""}) {}
+    SrcAndGen(const char *name_, const char* src_, const char *gen_hdr) : name(name_), src(src_), gen({gen_hdr, "", ""}) {}
+    SrcAndGen(const char *name_, const char* src_, const char *gen_hdr, const char *gen_src) : name(name_), src(src_), gen({gen_hdr, "", gen_src}) {}
 };
 
-void test_regen_exec(const char *cfg_yml_buf, std::initializer_list<SrcAndGen> sources)
+struct GenCompare
 {
-    auto yml = to_csubstr(cfg_yml_buf);
-    auto cfg_file = c4::fs::ScopedTmpFile(yml.str, yml.len, "c4regen.tmp-XXXXXXXX.cfg.yml", "wb", /*do_delete*/false);
+    SrcAndGen const& case_;
+    c4::regen::Regen const& rg;
+    c4::regen::SourceFile const& src_file;
+
+    GenCompare(SrcAndGen const& case__, c4::regen::Regen const& rg_, c4::regen::SourceFile const&  src_file_)
+        : case_(case__), rg(rg_), src_file(src_file_)
+    {
+    }
+
+    void check(GenStrs *gen_files, GenStrs *gen_code)
+    {
+        rg.m_writer.m_impl->extract_filenames(src_file.m_name, gen_files);
+        c4::fs::file_get_contents(gen_files->m_hdr.c_str(), &gen_code->m_hdr);
+        c4::fs::file_get_contents(gen_files->m_inl.c_str(), &gen_code->m_inl);
+        c4::fs::file_get_contents(gen_files->m_src.c_str(), &gen_code->m_src);
+        compare_hdr(gen_code->m_hdr, case_.gen.m_hdr);
+        compare_inl(gen_code->m_inl, case_.gen.m_inl);
+        compare_src(gen_code->m_src, case_.gen.m_src);
+    }
+
+    void compare_hdr(std::string const& hdr, const char *expected)
+    {
+        EXPECT_EQ(hdr, expected);
+    }
+
+    void compare_inl(std::string const& inl, const char *expected)
+    {
+        EXPECT_EQ(inl, expected);
+    }
+
+    void compare_src(std::string const& src, const char *expected)
+    {
+        EXPECT_EQ(src, expected);
+    }
+};
+
+
+
+void test_regen_exec(const char *cfg_yml_buf, std::initializer_list<SrcAndGen> cases)
+{
+    csubstr yml = to_csubstr(cfg_yml_buf);
+    auto cfg_file = c4::fs::ScopedTmpFile(yml.str, yml.len, "c4regen-test.XXXXXXXX.cfg.yml", "wb", /*do_delete*/false);
     std::vector<const char*> args = {"-x", "generate", "-c", cfg_file.m_name, "-f", "'-x'", "-f", "'c++'"};
     std::vector<c4::fs::ScopedTmpFile> src_files;
     std::vector<std::string> src_file_fullnames;
     std::string cwd;
     fs::cwd(&cwd);
-    for(SrcAndGen sg : sources)
+    for(SrcAndGen sg : cases)
     {
-        src_files.emplace_back(sg.src, strlen(sg.src), "c4regen.tmp-XXXXXXXX.cpp", "wb", /*do_delete*/false);
+        src_files.emplace_back(sg.src, strlen(sg.src), "c4regen-test.XXXXXXXX.cpp", "wb", /*do_delete*/false);
         // we need the full path to the file
         src_file_fullnames.emplace_back();
         src_files.back().full_path(&src_file_fullnames.back());
         args.emplace_back(src_file_fullnames.back().c_str());
     }
-    c4::regen::exec((int)args.size(), args.data());
+
+    c4::regen::Regen rg;
+    c4::regen::exec((int)args.size(), args.data(), /*skip_exe_name*/false, &rg);
+
+    using GenStrs = c4::regen::CodeInstances<std::string>;
+    GenStrs filenames, generated;
+
+    ASSERT_EQ(cases.size(), rg.m_src_files.size());
+
+    int count = 0;
+    for(SrcAndGen case_ : cases)
+    {
+        GenCompare gc(case_, rg, rg.m_src_files[count++]);
+        gc.check(&filenames, &generated);
+    }
 }
 
 
@@ -209,10 +273,8 @@ generators:
     hdr_preamble: |
       #include "enum_pairs.h"
     hdr: |
-      // {{name}}
       template<> const EnumPairs<{{type}}> enum_pairs();
     src: |
-      // {{name}}
       template<> const EnumPairs<{{type}}> enum_pairs()
       {
           static const EnumAndName<{{type}}> vals[] = {
@@ -224,11 +286,18 @@ generators:
           return r;
       }
 )",
-    {{"", ""},
-     {R"(#define C4_ENUM(...)
-C4_ENUM(foo, bar: baz)
+    {{"empty_sources", "", ""},
+
+     {"basic_enum", R"(#define C4_ENUM(...)
+C4_ENUM()
 typedef enum {FOO, BAR} MyEnum_e;
-)"}
+)", 
+     ""},
+    
+     {"enum_with_meta", R"(#define C4_ENUM(...)
+C4_ENUM(aaa, bbb: ccc)
+typedef enum {FOO, BAR} MyEnum_e;
+)", ""},
     });
 }
 
@@ -245,12 +314,10 @@ generators:
     extract:
       macro: C4_CLASS
     hdr: |
-      // {{name}}
       void show({{name}} const& obj);
     src_preamble: |
       #include <iostream>
     src: |
-      // {{name}}
       void show({{name}} const& obj);
       {
           {% for m in members %}
@@ -261,8 +328,8 @@ generators:
           {% endfor %}
       }
 )",
-    {{"", ""},
-     {R"(#define C4_CLASS(...)
+    {{"empty", "", ""},
+     {"two_classes", R"(#define C4_CLASS(...)
 C4_CLASS()
 struct foo
 {

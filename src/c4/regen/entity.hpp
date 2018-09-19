@@ -67,6 +67,12 @@ public:
     
     virtual void create_prop_tree(c4::yml::NodeRef root) const;
 
+    void clear_handles()
+    {
+        m_tu = nullptr;
+        m_index = nullptr;
+    }
+
 protected:
 
     csubstr _get_display_name() const { return to_csubstr(m_cursor.display_name(*m_index)); }

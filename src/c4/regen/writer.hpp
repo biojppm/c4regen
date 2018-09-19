@@ -18,7 +18,7 @@ void add_src(const char* ext);
 
 //-----------------------------------------------------------------------------
 
-/** the template used to render each chunk */
+/** the template used to render each chunk of generated code */
 constexpr const char s_default_tpl_chunk[] = R"(
 // generator: {{generator.name}}
 // entity: {{entity.name}} @ {{entity.file}}:{{entity.line}}
@@ -32,6 +32,7 @@ constexpr const char s_default_tpl_chunk[] = R"(
 constexpr const char s_default_tpl_hdr[] = R"({% if has_hdr != 0 %}
 // DO NOT EDIT!
 // This was automatically generated with https://github.com/biojppm/c4regen
+
 #ifndef {{hdr.include_guard}}
 #define {{hdr.include_guard}}
 
@@ -61,6 +62,7 @@ constexpr const char s_default_tpl_hdr[] = R"({% if has_hdr != 0 %}
 constexpr const char s_default_tpl_inl[] = R"({% if has_inl != 0 %}
 // DO NOT EDIT!
 // This was automatically generated with https://github.com/biojppm/c4regen
+
 #ifndef {{inl.include_guard}}
 #define {{inl.include_guard}}
 
@@ -145,15 +147,15 @@ struct WriterBase
 
 public:
 
-
     virtual ~WriterBase() = default;
     virtual void load(c4::yml::NodeRef const n);
 
     void set_source_root(csubstr r) { m_source_root.assign(r.begin(), r.end()); }
 
-    virtual void extract_filenames(csubstr src_file, set_type $ filenames)
+    void extract_filenames(csubstr src_file_name, CodeInstances<std::string> $ fn);
+    virtual void insert_filenames(csubstr src_file_name, set_type $ filenames)
     {
-        _extract_filenames(src_file);
+        extract_filenames(src_file_name, &m_file_names);
         if( ! m_file_names.m_hdr.empty()) filenames->insert(m_file_names.m_hdr);
         if( ! m_file_names.m_inl.empty()) filenames->insert(m_file_names.m_inl);
         if( ! m_file_names.m_src.empty()) filenames->insert(m_file_names.m_src);
@@ -192,7 +194,6 @@ protected:
         _clear(&m_contributors);
     }
 
-    void _extract_filenames(csubstr name);
 };
 
 
@@ -204,7 +205,7 @@ struct WriterStdout : public WriterBase
     void _begin_file(SourceFile c$$ src) override
     {
         _clear();
-        _extract_filenames(src.m_name);
+        extract_filenames(src.m_name, &m_file_names);
     }
     void _end_file(SourceFile c$$ src) override
     {
@@ -215,7 +216,7 @@ struct WriterStdout : public WriterBase
 #undef _c4prfile
     }
 
-    void extract_filenames(csubstr src_file, set_type $ filenames) override
+    void insert_filenames(csubstr src_file, set_type $ filenames) override
     {
         // nothing to do here
     }
@@ -240,7 +241,7 @@ struct WriterGenGroup : public WriterBase
     void _begin_file(SourceFile c$$ src) override
     {
         _clear();
-        _extract_filenames(src.m_name);
+        extract_filenames(src.m_name, &m_file_names);
     }
     void _end_file(SourceFile c$$ src) override
     {
@@ -259,7 +260,7 @@ struct WriterGenGroup : public WriterBase
 struct WriterSameFile : public WriterBase
 {
 
-    void extract_filenames(csubstr src_file, set_type $ filenames) override
+    void insert_filenames(csubstr src_file, set_type $ filenames) override
     {
     }
 
@@ -271,7 +272,7 @@ struct WriterSameFile : public WriterBase
 struct WriterSingleFile : public WriterBase
 {
 
-    void extract_filenames(csubstr src_file, set_type $ filenames) override
+    void insert_filenames(csubstr src_file, set_type $ filenames) override
     {
 
     }
@@ -306,9 +307,9 @@ public:
         m_impl->write(src);
     }
 
-    void extract_filenames(csubstr src_file, set_type *workspace)
+    void insert_filenames(csubstr src_file, set_type *workspace)
     {
-        m_impl->extract_filenames(src_file, workspace);
+        m_impl->insert_filenames(src_file, workspace);
     }
 
     void begin_files() { m_impl->begin_files(); }
@@ -316,62 +317,8 @@ public:
 
 public:
 
-    void load(c4::yml::NodeRef const n)
-    {
-        csubstr s;
-        n.get_if("writer", &s, csubstr("stdout"));
-        m_type = str2type(s);
-        switch(m_type)
-        {
-        case STDOUT:
-            m_impl.reset(new WriterStdout());
-            break;
-        case GENFILE:
-            m_impl.reset(new WriterGenFile());
-            break;
-        case GENGROUP:
-            m_impl.reset(new WriterGenGroup());
-            break;
-        case SAMEFILE:
-            m_impl.reset(new WriterSameFile());
-            break;
-        case SINGLEFILE:
-            m_impl.reset(new WriterSingleFile());
-            break;
-        default:
-            C4_ERROR("unknown writer type");
-        }
-        m_impl->load(n);
-    }
-
-    static Type_e str2type(csubstr type_name)
-    {
-        if(type_name == "stdout")
-        {
-            return STDOUT;
-        }
-        else if(type_name == "genfile")
-        {
-            return GENFILE;
-        }
-        else if(type_name == "gengroup")
-        {
-            return GENGROUP;
-        }
-        else if(type_name == "samefile")
-        {
-            return SAMEFILE;
-        }
-        else if(type_name == "singlefile")
-        {
-            return SINGLEFILE;
-        }
-        else
-        {
-            C4_ERROR("unknown writer type");
-        }
-        return STDOUT;
-    }
+    void load(c4::yml::NodeRef const n);
+    static Type_e str2type(csubstr type_name);
 
 };
 

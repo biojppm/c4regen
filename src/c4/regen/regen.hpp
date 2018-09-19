@@ -28,42 +28,64 @@ struct Regen
 
     Writer m_writer;
 
+    std::vector<SourceFile> m_src_files;
+    bool                    m_save_src_files;
+
 public:
 
-    Regen(const char* config_file)
+    Regen() : m_save_src_files(false) {}
+
+    Regen(const char* config_file) : Regen()
     {
-        _load_config_file(config_file);
+        load_config(config_file);
     }
 
     bool empty() const { return m_gens_all.empty(); }
 
+    void load_config(const char* file_name);
+
+    void save_src_files(bool yes) { m_save_src_files = yes; }
+
 public:
 
-    template<class SourceFileNameCollection>
+    template <class SourceFileNameCollection>
     void gencode(SourceFileNameCollection c$$ collection, const char* db_dir=nullptr, const char* const* flags=nullptr, size_t num_flags=0)
     {
         ast::CompilationDb db(db_dir);
         ast::Index idx;
         ast::TranslationUnit unit;
         yml::Tree workspace;
-        SourceFile sf;
 
+        SourceFile buf;
+        if(m_save_src_files) m_src_files.clear();
+        
         m_writer.begin_files();
-        for(const char* source_file : collection)
+        for(const char* filename : collection)
         {
-            sf.clear();
-            idx.clear();
-            if(db_dir)
+            if(m_save_src_files)
             {
-                unit.reset(idx, source_file, db);
+                m_src_files.emplace_back();
             }
             else
             {
-                unit.reset(idx, source_file, flags, num_flags);
+                buf.clear();
+                idx.clear();
+            }
+
+            SourceFile &sf = m_save_src_files ? m_src_files.back() : buf;
+
+            if(db_dir)
+            {
+                unit.reset(idx, filename, db);
+            }
+            else
+            {
+                unit.reset(idx, filename, flags, num_flags);
             }
             sf.init_source_file(idx, unit);
             sf.extract(m_gens_all.data(), m_gens_all.size());
             sf.gencode(m_gens_all.data(), m_gens_all.size(), workspace);
+            
             m_writer.write(sf);
         }
         m_writer.end_files();
@@ -75,7 +97,7 @@ public:
         Writer::set_type workspace;
         for(const char* source_file : collection)
         {
-            m_writer.extract_filenames(to_csubstr(source_file), &workspace);
+            m_writer.insert_filenames(to_csubstr(source_file), &workspace);
         }
         for(auto c$$ name : workspace)
         {
@@ -84,8 +106,6 @@ public:
     }
 
 private:
-
-    void _load_config_file(const char* file_name);
 
     template<class GeneratorT>
     void _loadgen(c4::yml::NodeRef const& n, std::vector<GeneratorT> *gens)

@@ -241,7 +241,7 @@ csubstr WriterBase::_incguard(csubstr filename)
     return incg;
 }
 
-void WriterBase::_extract_filenames(csubstr name)
+void WriterBase::extract_filenames(csubstr name, CodeInstances<std::string> $ fn)
 {
     C4_CHECK(name.not_empty());
 
@@ -268,9 +268,69 @@ void WriterBase::_extract_filenames(csubstr name)
     csubstr ext = wname.pop_right('.');
     csubstr name_wo_ext = wname.gpop_left('.');
 
-    catrs(&m_file_names.m_hdr, name_wo_ext, ".c4gen.hpp");
-    catrs(&m_file_names.m_inl, name_wo_ext, ".c4gen.def.hpp");
-    catrs(&m_file_names.m_src, name_wo_ext, ".c4gen.cpp");
+    catrs(&fn->m_hdr, name_wo_ext, ".c4gen.hpp");
+    catrs(&fn->m_inl, name_wo_ext, ".c4gen.def.hpp");
+    catrs(&fn->m_src, name_wo_ext, ".c4gen.cpp");
+}
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+void Writer::load(c4::yml::NodeRef const n)
+{
+    csubstr s;
+    n.get_if("writer", &s, csubstr("stdout"));
+    m_type = str2type(s);
+    switch(m_type)
+    {
+    case STDOUT:
+        m_impl.reset(new WriterStdout());
+        break;
+    case GENFILE:
+        m_impl.reset(new WriterGenFile());
+        break;
+    case GENGROUP:
+        m_impl.reset(new WriterGenGroup());
+        break;
+    case SAMEFILE:
+        m_impl.reset(new WriterSameFile());
+        break;
+    case SINGLEFILE:
+        m_impl.reset(new WriterSingleFile());
+        break;
+    default:
+        C4_ERROR("unknown writer type");
+    }
+    m_impl->load(n);
+}
+
+Writer::Type_e Writer::str2type(csubstr type_name)
+{
+    if(type_name == "stdout")
+    {
+        return STDOUT;
+    }
+    else if(type_name == "genfile")
+    {
+        return GENFILE;
+    }
+    else if(type_name == "gengroup")
+    {
+        return GENGROUP;
+    }
+    else if(type_name == "samefile")
+    {
+        return SAMEFILE;
+    }
+    else if(type_name == "singlefile")
+    {
+        return SINGLEFILE;
+    }
+    else
+    {
+        C4_ERROR("unknown writer type");
+    }
+    return STDOUT;
 }
 
 } // namespace regen

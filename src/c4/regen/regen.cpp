@@ -5,7 +5,7 @@
 namespace c4 {
 namespace regen {
 
-void Regen::_load_config_file(const char* file_name)
+void Regen::load_config(const char* file_name)
 {
     // read the yml config and parse it
     m_config_file_name = file_name;

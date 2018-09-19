@@ -30,7 +30,7 @@ inline bool valid_cmd(csubstr cmd)
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-inline int exec(int argc, const char *argv[], bool skip_exe_name=false)
+inline int exec(int argc, const char *argv[], bool skip_exe_name=false, regen::Regen *results=nullptr)
 {
     using namespace c4;
 
@@ -41,7 +41,11 @@ inline int exec(int argc, const char *argv[], bool skip_exe_name=false)
     }
 
     auto opts = opt::make_parser(usage, argc, argv, HELP, {CFG});
-    regen::Regen rg(opts(CFG));
+    regen::Regen ws;
+    regen::Regen &rg = (results != nullptr) ? *results : ws;
+
+    rg.load_config(opts(CFG));
+
     if(rg.empty()) return 0;
 
     csubstr cmd = to_csubstr(opts(CMD));
@@ -72,18 +76,18 @@ inline int exec(int argc, const char *argv[], bool skip_exe_name=false)
 }
 
 template <size_t N>
-inline int exec(const char *(&argv)[N], bool with_exe_name=false)
+inline int exec(const char *(&argv)[N], bool skip_exe_name=false, regen::Regen *results=nullptr)
 {
-    return exec(N, argv, with_exe_name);
+    return exec(N, argv, skip_exe_name, results);
 }
 
-inline int exec(std::initializer_list<const char*> il, bool with_exe_name=false)
+inline int exec(std::initializer_list<const char*> il, bool skip_exe_name=false, regen::Regen *results=nullptr)
 {
     // [support.initlist] 18.9/1 specifies that for std::initializer_list<T>
     // iterator must be T*
     auto argv = const_cast<const char**>(il.begin());
     int  argc = static_cast<int>(il.size());
-    return exec(argc, argv, with_exe_name);
+    return exec(argc, argv, skip_exe_name, results);
 }
 
 } // namespace regen
