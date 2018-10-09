@@ -242,6 +242,7 @@ void test_regen_exec(const char *cfg_yml_buf, std::initializer_list<SrcAndGen> c
     }
 
     c4::regen::Regen rg;
+    rg.m_save_src_files = true;
     c4::regen::exec((int)args.size(), args.data(), /*skip_exe_name*/false, &rg);
 
     using GenStrs = c4::regen::CodeInstances<std::string>;
