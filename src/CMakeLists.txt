@@ -24,8 +24,11 @@ set(src
 
 find_library(LIBCLANG_LIB clang)
 find_path(LIBCLANG_INC clang-c/Index.h)
-if((NOT LIBCLANG_LIB) OR (NOT LIBCLANG_INC))
-    message(FATAL_ERROR "could not find libclang")
+if(NOT LIBCLANG_LIB)
+    message(FATAL_ERROR "could not find libclang. Please set the variable: LIBCLANG_LIB")
+endif()
+if(NOT LIBCLANG_INC)
+    message(FATAL_ERROR "could not find clangc-Index.h. Please set the variable: LIBCLANG_INC")
 endif()
 
 c4_require_module(C4REGEN c4core    SUBDIRECTORY ${C4REGEN_EXT_DIR}/c4core)
@@ -45,4 +48,4 @@ c4_add_library(C4REGEN c4regen
 c4_add_executable(C4REGEN regen
     SOURCES main.cpp
     LIBS c4regen
-    INC_DIRS ${C4REGEN_EXT_DIR}/optionparser/src)
+)
