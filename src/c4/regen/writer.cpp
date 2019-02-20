@@ -61,10 +61,10 @@ void add_src(const char* ext) { s_src_exts.add(ext); }
 void WriterBase::load(c4::yml::NodeRef const n)
 {
     auto ntpl = n.find_child("tpl");
-    m_tpl_chunk.load(ntpl, "chunk", s_default_tpl_chunk);
-    m_file_tpl.m_hdr.load(ntpl, "hdr", s_default_tpl_hdr);
-    m_file_tpl.m_inl.load(ntpl, "inl", s_default_tpl_inl);
-    m_file_tpl.m_src.load(ntpl, "src", s_default_tpl_src);
+    m_tpl_chunk     .load(ntpl, "chunk", s_default_tpl_chunk);
+    m_file_tpl.m_hdr.load(ntpl, "hdr"  , s_default_tpl_hdr);
+    m_file_tpl.m_inl.load(ntpl, "inl"  , s_default_tpl_inl);
+    m_file_tpl.m_src.load(ntpl, "src"  , s_default_tpl_src);
 }
 
 void WriterBase::write(SourceFile c$$ src, set_type $ output_names)

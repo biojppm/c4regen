@@ -264,7 +264,18 @@ TEST(enums, basic)
     test_regen_exec(R"(
 # one of: stdout, samefile, genfile, gengroup, singlefile
 writer: gengroup
-
+tpl:
+  chunk: |
+    {{gencode}}
+  hdr: |
+    #pragma once
+    {{hdr.preamble}}
+    {{hdr.gencode}}
+  src: |
+    {% if has_hdr %}
+    #include "{{hdr.filename}}"
+    {% endif %}
+    {{src.preamble}}
 generators:
   -
     name: enum_symbols
