@@ -57,22 +57,27 @@ public:
         yml::Tree workspace;
 
         SourceFile buf;
-        if(m_save_src_files) m_src_files.clear();
+        if(m_save_src_files)
+        {
+            size_t fsz = 0;
+            for(const char* filename : collection)
+            {
+                fsz++;
+            }
+            m_src_files.resize(fsz);
+        }
         
         m_writer.begin_files();
+        size_t ifile = 0;
         for(const char* filename : collection)
         {
-            if(m_save_src_files)
-            {
-                m_src_files.emplace_back();
-            }
-            else
+            if( ! m_save_src_files)
             {
                 buf.clear();
                 idx.clear();
             }
 
-            SourceFile &sf = m_save_src_files ? m_src_files.back() : buf;
+            SourceFile &sf = m_save_src_files ? m_src_files[ifile++] : buf;
 
             if(db_dir)
             {
