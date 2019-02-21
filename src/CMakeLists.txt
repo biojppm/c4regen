@@ -30,6 +30,10 @@ endif()
 if(NOT LIBCLANG_INC)
     message(FATAL_ERROR "could not find clangc-Index.h. Please set the variable: LIBCLANG_INC")
 endif()
+if(WIN32)
+    find_path(LIBCLANG_DLL clang PATH_SUFFIXES .dll)
+endif()
+
 
 c4_require_module(C4REGEN c4core    SUBDIRECTORY ${C4REGEN_EXT_DIR}/c4core)
 c4_require_module(C4REGEN rapidyaml SUBDIRECTORY ${C4REGEN_EXT_DIR}/rapidyaml)
@@ -42,6 +46,7 @@ c4_add_library(C4REGEN c4regen
     SOURCES ${src}
     LIBS c4fs c4tpl c4log ${LIBCLANG_LIB}
     INTERFACES c4opt
+    DLLS ${LIBCLANG_DLL}
     INC_DIRS ${CMAKE_CURRENT_LIST_DIR} ${LIBCLANG_INC}
 )
 
