@@ -1,18 +1,18 @@
 [submodule "c4tpl"]
-	path = extern/c4tpl
+	path = ext/c4tpl
 	url = https://github.com/biojppm/c4tpl
 [submodule "extern/c4opt"]
-	path = extern/c4opt
+	path = ext/c4opt
 	url = https://github.com/biojppm/c4opt
 [submodule "extern/c4log"]
-	path = extern/c4log
+	path = ext/c4log
 	url = https://github.com/biojppm/c4log
 [submodule "extern/c4core"]
-	path = extern/c4core
+	path = ext/c4core
 	url = https://github.com/biojppm/c4core
 [submodule "extern/rapidyaml"]
-	path = extern/rapidyaml
+	path = ext/rapidyaml
 	url = https://github.com/biojppm/rapidyaml
 [submodule "extern/c4fs"]
-	path = extern/c4fs
+	path = ext/c4fs
 	url = https://github.com/biojppm/c4fs

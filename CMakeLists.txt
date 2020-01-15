@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.2)
 project(c4regen)
 
-include(./extern/c4core/cmake/c4Project.cmake)
+include(./ext/c4core/cmake/c4Project.cmake)
 c4_declare_project(c4regen)
 
 set(C4REGEN_SRC_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
-set(C4REGEN_EXT_DIR ${CMAKE_CURRENT_LIST_DIR}/extern)
+set(C4REGEN_EXT_DIR ${CMAKE_CURRENT_LIST_DIR}/ext)
 
 find_library(LIBCLANG_LIB clang)
 find_path(LIBCLANG_INC clang-c/Index.h)
