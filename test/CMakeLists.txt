@@ -1,7 +1,7 @@
-c4_setup_testing(C4REGEN ON)
+c4_setup_testing()
 
 function(c4regen_add_test name)
-    c4_add_executable(C4REGEN c4regen-test-${name}
+    c4_add_executable(c4regen-test-${name}
         SOURCES ${ARGN} main.cpp
         INC_DIRS ${CMAKE_CURRENT_LIST_DIR}
         LIBS c4regen gtest

@@ -62,12 +62,12 @@ void EnumSymbol::init_symbol(astEntityRef r, Enum *e)
     if(e->m_underlying_type.is_integral_signed())
     {
         long long val = clang_getEnumConstantDeclValue(m_cursor);
-        m_val_size = to_str(m_val_buf, val);
+        m_val_size = to_chars(m_val_buf, val);
     }
     else if(e->m_underlying_type.is_integral_unsigned())
     {
         unsigned long long val = clang_getEnumConstantDeclUnsignedValue(m_cursor);
-        m_val_size = to_str(m_val_buf, val);
+        m_val_size = to_chars(m_val_buf, val);
     }
 }
 

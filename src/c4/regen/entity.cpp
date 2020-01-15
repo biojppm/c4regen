@@ -1,5 +1,6 @@
 #include "c4/regen/entity.hpp"
 #include "c4/yml/parse.hpp"
+#include "c4/format.hpp"
 
 namespace c4 {
 namespace regen {

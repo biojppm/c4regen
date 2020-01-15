@@ -163,7 +163,7 @@ void WriterBase::_append_code_chunk(CodeChunk c$$ ch, c4::tpl::Rope c$$ r, Desti
     c4::yml::NodeRef ent = root["entity"];
     ent |= c4::yml::MAP;
     ent["name"] = ch.m_originator->m_name;
-    ent["file"] = ch.m_originator->m_region.m_file;
+    ent["file"] = to_csubstr(ch.m_originator->m_region.m_file);
     ent["line"] << ch.m_originator->m_region.m_start.line;
     root["gencode"] = to_csubstr(m_tpl_ws_str);
     m_tpl_chunk.render(root, &m_tpl_ws_rope);

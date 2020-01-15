@@ -103,7 +103,7 @@ bool Extractor::has_true_annotation(csubstr annot, csubstr entry) const
     val = val.first_uint_span();
     C4_CHECK_MSG(val.not_empty(), "could not parse annotation entry");
     uint32_t v;
-    bool ok = from_str(val, &v);
+    bool ok = from_chars(val, &v);
     C4_CHECK_MSG(ok, "could not parse annotation entry");
     return v != 0;
 }
