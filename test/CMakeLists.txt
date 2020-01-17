@@ -6,7 +6,7 @@ function(c4regen_add_test name)
         INC_DIRS ${CMAKE_CURRENT_LIST_DIR}
         LIBS c4regen gtest
         FOLDER c4regen-test)
-    c4_add_test(C4REGEN c4regen-test-${name} ON)
+    c4_add_test(c4regen-test-${name})
 endfunction(c4regen_add_test)
 
 c4regen_add_test(basic basic.cpp)
