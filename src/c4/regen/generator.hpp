@@ -68,8 +68,8 @@ struct Generator;
 
 struct CodeChunk : public CodeInstances<c4::tpl::Rope>
 {
-    Generator c$ m_generator;
-    Entity    c$ m_originator;
+    Generator const* m_generator;
+    Entity    const* m_originator;
 };
 
 

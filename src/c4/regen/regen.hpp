@@ -62,11 +62,12 @@ public:
             size_t fsz = 0;
             for(const char* filename : collection)
             {
+                C4_UNUSED(filename);
                 fsz++;
             }
             m_src_files.resize(fsz);
         }
-        
+
         m_writer.begin_files();
         size_t ifile = 0;
         for(const char* filename : collection)

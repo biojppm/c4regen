@@ -40,26 +40,26 @@ void Class::init(astEntityRef e)
     } vd{this};
 
     auto fn = [](ast::Cursor c, ast::Cursor parent, void *data) {
-        auto vd = (_visit_data const*) data;
+        auto vd_ = (_visit_data const*) data;
         if(c.kind() == CXCursor_FieldDecl)
         {
             ast::Entity ae;
             ae.cursor = c;
             ae.parent = parent;
-            ae.idx = vd->c->m_index;
-            ae.tu = vd->c->m_tu;
-            vd->c->m_members.emplace_back();
-            vd->c->m_members.back().init_member(ae, vd->c);
+            ae.idx = vd_->c->m_index;
+            ae.tu = vd_->c->m_tu;
+            vd_->c->m_members.emplace_back();
+            vd_->c->m_members.back().init_member(ae, vd_->c);
         }
         else if(c.kind() == CXCursor_CXXMethod)
         {
             ast::Entity ae;
             ae.cursor = c;
             ae.parent = parent;
-            ae.idx = vd->c->m_index;
-            ae.tu = vd->c->m_tu;
-            vd->c->m_methods.emplace_back();
-            vd->c->m_methods.back().init_method(ae, vd->c);
+            ae.idx = vd_->c->m_index;
+            ae.tu = vd_->c->m_tu;
+            vd_->c->m_methods.emplace_back();
+            vd_->c->m_methods.back().init_method(ae, vd_->c);
         }
         return CXChildVisit_Continue;
     };

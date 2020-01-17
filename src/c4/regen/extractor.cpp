@@ -124,6 +124,7 @@ Extractor::Data Extractor::extract(SourceFile c$$ sf, c4::ast::Cursor c) const
             ret.has_tag = false;
             return ret;
         }
+        break; // @todo NOT SURE...... revisit
     case EXTR_TAGGED_MACRO:
     case EXTR_TAGGED_MACRO_ANNOTATED:
         if(c.kind() == CXCursor_MacroExpansion)
@@ -133,7 +134,7 @@ Extractor::Data Extractor::extract(SourceFile c$$ sf, c4::ast::Cursor c) const
                 ast::Cursor subj = c.tag_subject();
                 if(kind_matches(subj.kind()))
                 {
-                    bool annotation_ok;
+                    bool annotation_ok = false;
                     if(m_type == EXTR_TAGGED_MACRO)
                     {
                         annotation_ok = true;

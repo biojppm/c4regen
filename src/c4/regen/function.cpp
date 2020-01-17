@@ -7,6 +7,7 @@ namespace regen {
 
 void FunctionParameter::init_param(astEntityRef e, Function c$ f)
 {
+    C4_UNUSED(f);
     this->Entity::init(e);
 }
 

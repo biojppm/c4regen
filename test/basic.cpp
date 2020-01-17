@@ -42,12 +42,13 @@ using TestEnum_e = enum {
 int main(int argc, char *argv[]) { return 0; }
 )");
     tu.unit.visit_children([](Cursor c, Cursor parent, void* data){
-            auto &tu = *(test_unit*) data;
-            const char* name  = c.display_name(tu.idx);
-            const char* type  = c.type_spelling(tu.idx);
-            const char* spell = c.spelling(tu.idx);
-            Location loc = c.location(tu.idx);
-            c4::_log("{}:{}:{}: {}", loc.file, loc.line, loc.column, c.kind_spelling(tu.idx));
+            C4_UNUSED(parent);
+            auto &tu_ = *(test_unit*) data;
+            const char* name  = c.display_name(tu_.idx);
+            const char* type  = c.type_spelling(tu_.idx);
+            const char* spell = c.spelling(tu_.idx);
+            Location loc = c.location(tu_.idx);
+            c4::_log("{}:{}:{}: {}", loc.file, loc.line, loc.column, c.kind_spelling(tu_.idx));
             if(strlen(name)) c4::_log(": name='{}'", name);
             if(strlen(type)) c4::_log(": type='{}'", type);
             if(strlen(spell)) c4::_log(": spell='{}'", spell);
@@ -245,7 +246,6 @@ void test_regen_exec(const char *cfg_yml_buf, std::initializer_list<SrcAndGen> c
     rg.m_save_src_files = true;
     c4::regen::exec((int)args.size(), args.data(), /*skip_exe_name*/false, &rg);
 
-    using GenStrs = c4::regen::CodeInstances<std::string>;
     GenStrs filenames, generated;
 
     ASSERT_EQ(cases.size(), rg.m_src_files.size());

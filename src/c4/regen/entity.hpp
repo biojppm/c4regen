@@ -63,6 +63,7 @@ struct Entity
 
 public:
 
+    virtual ~Entity() = default;
     virtual void init(astEntityRef e);
     
     virtual void create_prop_tree(c4::yml::NodeRef root) const;

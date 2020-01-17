@@ -23,7 +23,7 @@ void Regen::load_config(const char* file_name)
 
     n = r.find_child("generators");
     if( ! n.valid()) return;
-    for(auto const& ch : n.children())
+    for(auto const ch : n.children())
     {
         csubstr gtype = ch["type"].val();
         if(gtype == "enum")

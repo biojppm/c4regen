@@ -75,16 +75,16 @@ private:
 
         auto visitor = [](ast::Cursor c, ast::Cursor parent, void *data)
         {
-            auto vd = (_visitor_data $)data;
-            Extractor::Data ret = vd->gen->m_extractor.extract(*vd->sf, c);
+            auto vd_ = (_visitor_data $)data;
+            Extractor::Data ret = vd_->gen->m_extractor.extract(*vd_->sf, c);
             if(ret.extracted)
             {
-                EntityPos pos{vd->gen, vd->type, vd->entities->size()};
-                vd->sf->m_pos.emplace_back(pos);
-                vd->sf->m_chunks.emplace_back();
-                vd->entities->emplace_back();
-                EntityT $$ e = vd->entities->back();
-                ast::Entity ae = vd->sf->ast_ent(ret.cursor, parent);
+                EntityPos pos{vd_->gen, vd_->type, vd_->entities->size()};
+                vd_->sf->m_pos.emplace_back(pos);
+                vd_->sf->m_chunks.emplace_back();
+                vd_->entities->emplace_back();
+                EntityT $$ e = vd_->entities->back();
+                ast::Entity ae = vd_->sf->ast_ent(ret.cursor, parent);
                 e.init(ae);
                 if(ret.has_tag)
                 {
@@ -115,14 +115,14 @@ public:
 
     struct const_iterator
     {
-        const_iterator(SourceFile c$ s, size_t pos) : s(s), pos(pos) {}
+        const_iterator(SourceFile c$ s_, size_t pos_) : s(s_), pos(pos_) {}
         SourceFile c$ s;
         size_t pos;
 
         using value_type = Entity const;
 
-        value_type $$ operator*  () const { C4_ASSERT(pos >= 0 && pos < s->m_pos.size()); return *s->resolve(s->m_pos[pos]); }
-        value_type  $ operator-> () const { C4_ASSERT(pos >= 0 && pos < s->m_pos.size()); return  s->resolve(s->m_pos[pos]); }
+        value_type & operator*  () const { C4_ASSERT(/*pos >= 0 && */pos < s->m_pos.size()); return *s->resolve(s->m_pos[pos]); }
+        value_type * operator-> () const { C4_ASSERT(/*pos >= 0 && */pos < s->m_pos.size()); return  s->resolve(s->m_pos[pos]); }
     };
 
     const_iterator begin() const { return const_iterator(this, 0); }
@@ -130,7 +130,7 @@ public:
 
 public:
 
-    Entity c$ resolve(EntityPos c$$ p) const
+    Entity const* resolve(EntityPos c$$ p) const
     {
         switch(p.entity_type)
         {

@@ -20,16 +20,16 @@ void Enum::init(astEntityRef e)
     } vd{this};
 
     auto fn = [](ast::Cursor c, ast::Cursor parent, void *data) {
-        auto vd = (_symbol_visit_data const*) data;
+        auto vd_ = (_symbol_visit_data const*) data;
         if(c.kind() == CXCursor_EnumConstantDecl)
         {
             ast::Entity ae;
             ae.cursor = c;
             ae.parent = parent;
-            ae.idx = vd->e->m_index;
-            ae.tu = vd->e->m_tu;
-            vd->e->m_symbols.emplace_back();
-            vd->e->m_symbols.back().init_symbol(ae, vd->e);
+            ae.idx = vd_->e->m_index;
+            ae.tu = vd_->e->m_tu;
+            vd_->e->m_symbols.emplace_back();
+            vd_->e->m_symbols.back().init_symbol(ae, vd_->e);
         }
         return CXChildVisit_Continue;
     };
@@ -61,12 +61,12 @@ void EnumSymbol::init_symbol(astEntityRef r, Enum *e)
     m_sym = m_name;
     if(e->m_underlying_type.is_integral_signed())
     {
-        long long val = clang_getEnumConstantDeclValue(m_cursor);
+        int64_t val = static_cast<int64_t>(clang_getEnumConstantDeclValue(m_cursor));
         m_val_size = to_chars(m_val_buf, val);
     }
     else if(e->m_underlying_type.is_integral_unsigned())
     {
-        unsigned long long val = clang_getEnumConstantDeclUnsignedValue(m_cursor);
+        uint64_t val = static_cast<uint64_t>(clang_getEnumConstantDeclUnsignedValue(m_cursor));
         m_val_size = to_chars(m_val_buf, val);
     }
 }

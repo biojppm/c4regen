@@ -15,7 +15,7 @@ Cursor Cursor::first_child() const
     {
         Cursor this_;
         Cursor child;
-    } data{*this, clang_getNullCursor()};
+    } data_{*this, clang_getNullCursor()};
 
     visit_children(*this, [](Cursor c, Cursor parent, void *d_){
         auto d = (_fchdata $) d_;
@@ -26,9 +26,9 @@ Cursor Cursor::first_child() const
         }
         // clang is still calling after returning break, so renew the vows here
         return CXChildVisit_Break;
-    }, &data);
+    }, &data_);
 
-    return data.child;
+    return data_.child;
 }
 
 Cursor Cursor::next_sibling() const
@@ -39,14 +39,15 @@ Cursor Cursor::next_sibling() const
         Cursor this_;
         Cursor next;
         bool   gotit;
-    } data{*this, clang_getNullCursor(), false};
+    } data_{*this, clang_getNullCursor(), false};
     Cursor parent = clang_getCursorLexicalParent(*this);
     if(clang_Cursor_isNull(parent))
     {
         parent = root();
     }
     if(parent.is_same(*this)) return clang_getNullCursor();
-    visit_children(parent, [](Cursor c, Cursor parent, void* d_){
+    visit_children(parent, [](Cursor c, Cursor parent_, void* d_){
+        C4_UNUSED(parent_);
         auto d = (_nsibdata $) d_;
         if( ! d->gotit)
         {
@@ -62,9 +63,9 @@ Cursor Cursor::next_sibling() const
             return CXChildVisit_Break;
         }
         return CXChildVisit_Continue;
-    }, &data);
+    }, &data_);
 
-    return data.next;
+    return data_.next;
 }
 
 void Cursor::print_recursive(const char* msg, unsigned indent) const
@@ -76,19 +77,19 @@ void Cursor::print_recursive(const char* msg, unsigned indent) const
         Cursor prev_parent;
         Cursor prev_child;
     } vd{msg, indent, clang_getNullCursor(), *this};
-    visit_children(*this, [](Cursor c, Cursor parent, void *data) {
-        auto vd = (_visit_data $) data;
-        if(parent.is_same(vd->prev_child)) 
+    visit_children(*this, [](Cursor c, Cursor parent, void *data_) {
+        auto vd_ = (_visit_data $) data_;
+        if(parent.is_same(vd_->prev_child))
         {
-            ++vd->indent_;
+            ++vd_->indent_;
         }
-        else if(c.is_same(vd->prev_parent))
+        else if(c.is_same(vd_->prev_parent))
         {
-            --vd->indent_;
+            --vd_->indent_;
         }
-        c.print(vd->msg_, vd->indent_);
-        vd->prev_parent = parent;
-        vd->prev_child = c;
+        c.print(vd_->msg_, vd_->indent_);
+        vd_->prev_parent = parent;
+        vd_->prev_child = c;
         return CXChildVisit_Recurse;
     }, &vd);
 }

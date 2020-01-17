@@ -57,7 +57,7 @@ void Entity::create_prop_tree(c4::yml::NodeRef n) const
         if(m_cursor.is_tpl_function()) n["is_tpl_function"] = "1";
         for(auto const& tpl_arg : m_tpl_args)
         {
-
+            C4_UNUSED(tpl_arg); // @todo populate with template properties
         }
     }
 

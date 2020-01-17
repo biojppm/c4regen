@@ -8,7 +8,7 @@
 
 namespace c4 {
 namespace regen {
-    
+
 bool is_hdr(csubstr filename);
 bool is_src(csubstr filename);
 
@@ -129,7 +129,7 @@ struct WriterBase
 {
     typedef enum {HDR, INL, SRC} Destination_e;
     using CodeStore = CodeInstances<std::string>;
-    using Contributors = std::set<Generator c$>;
+    using Contributors = std::set<Generator const*>;
     using set_type     = std::set<std::string>;
 
     CodeInstances<Contributors> m_contributors;  ///< generators that contributed code
@@ -168,8 +168,8 @@ public:
 
 protected:
 
-    virtual void _begin_file(SourceFile c$$ src) {}
-    virtual void _end_file(SourceFile c$$ src) {}
+    virtual void _begin_file(SourceFile c$$ src) { C4_UNUSED(src); }
+    virtual void _end_file(SourceFile c$$ src) { C4_UNUSED(src); }
 
     void _request_preambles(CodeChunk c$$ chunk);
     void _append_preamble(csubstr s, Destination_e dst);
@@ -204,11 +204,13 @@ struct WriterStdout : public WriterBase
 
     void _begin_file(SourceFile c$$ src) override
     {
+        C4_UNUSED(src);
         _clear();
         extract_filenames(src.m_name, &m_file_names);
     }
     void _end_file(SourceFile c$$ src) override
     {
+        C4_UNUSED(src);
 #define _c4prfile(which) if( ! m_file_contents.which.empty()) { printf("%.*s\n", (int)m_file_contents.which.size(), m_file_contents.which.data()); }
         _c4prfile(m_hdr)
         _c4prfile(m_inl)
@@ -218,6 +220,8 @@ struct WriterStdout : public WriterBase
 
     void insert_filenames(csubstr src_file, set_type $ filenames) override
     {
+        C4_UNUSED(src_file);
+        C4_UNUSED(filenames);
         // nothing to do here
     }
 
@@ -240,11 +244,13 @@ struct WriterGenGroup : public WriterBase
 
     void _begin_file(SourceFile c$$ src) override
     {
+        C4_UNUSED(src);
         _clear();
         extract_filenames(src.m_name, &m_file_names);
     }
     void _end_file(SourceFile c$$ src) override
     {
+        C4_UNUSED(src);
 #define _c4svfile(which) c4::fs::file_put_contents(m_file_names.which.c_str(), m_file_contents.which.data(), m_file_contents.which.size());
         _c4svfile(m_hdr)
         _c4svfile(m_inl)
@@ -262,6 +268,8 @@ struct WriterSameFile : public WriterBase
 
     void insert_filenames(csubstr src_file, set_type $ filenames) override
     {
+        C4_UNUSED(src_file);
+        C4_UNUSED(filenames);
     }
 
 };
@@ -274,7 +282,8 @@ struct WriterSingleFile : public WriterBase
 
     void insert_filenames(csubstr src_file, set_type $ filenames) override
     {
-
+        C4_UNUSED(src_file);
+        C4_UNUSED(filenames);
     }
 
 };

@@ -5,7 +5,7 @@
 
 namespace c4 {
 namespace regen {
-   
+
 struct FileType
 {
     std::vector<std::string> m_extensions;
@@ -69,6 +69,7 @@ void WriterBase::load(c4::yml::NodeRef const n)
 
 void WriterBase::write(SourceFile c$$ src, set_type $ output_names)
 {
+    C4_UNUSED(output_names);
     _begin_file(src);
 
     for(auto c$$ chunk : src.m_chunks)
@@ -265,7 +266,7 @@ void WriterBase::extract_filenames(csubstr name, CodeInstances<std::string> $ fn
     }
 
     C4_ASSERT(is_hdr(wname) || is_src(wname));
-    csubstr ext = wname.pop_right('.');
+    //csubstr ext = wname.pop_right('.');
     csubstr name_wo_ext = wname.gpop_left('.');
 
     catrs(&fn->m_hdr, name_wo_ext, ".c4gen.hpp");
