@@ -4,9 +4,6 @@ project(c4regen)
 include(./ext/c4core/cmake/c4Project.cmake)
 c4_declare_project(c4regen)
 
-set(C4REGEN_SRC_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
-set(C4REGEN_EXT_DIR ${CMAKE_CURRENT_LIST_DIR}/ext)
-
 find_library(LIBCLANG_LIB clang)
 find_path(LIBCLANG_INC clang-c/Index.h)
 if(NOT LIBCLANG_INC)
@@ -68,12 +65,4 @@ c4_install_target(c4regen)
 c4_install_target(regen)
 c4_install_exports()
 
-if(C4REGEN_BUILD_TESTS)
-    enable_testing() # this must be done here (and not inside the test dir)
-                     # so that the test targets are available at the top level
-    add_subdirectory(test)
-endif()
-
-if(C4REGEN_BUILD_BENCHMARKS)
-    add_subdirectory(bm)
-endif()
+c4_add_dev_targets()
