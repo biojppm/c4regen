@@ -255,19 +255,18 @@ void WriterBase::extract_filenames(csubstr name, CodeInstances<std::string> $ fn
         name = name.sub(m_source_root.size());
     }
 
-    auto $$ tmp = m_file_names.m_src;
-    tmp.assign(name.begin(), name.end());
+    m_file_names.m_src.assign(name.begin(), name.end());
+    // duplication is intentional, to prevent overlapping buffers in the catrs calls below
+    std::string tmp = m_file_names.m_src;
     substr wname = to_substr(tmp);
-    for(size_t i = 0; i < wname.len; ++i)
+    c4::fs::to_unix_sep(wname.str, wname.len);
+    for(auto &c : wname)
     {
-        char $$ c = wname.str[i];
-        if(c4::fs::is_sep(i, wname.str, wname.len)) c = '/';
-        else c = std::tolower(c);
+        c = std::tolower(c);
     }
 
     C4_ASSERT(is_hdr(wname) || is_src(wname));
-    //csubstr ext = wname.pop_right('.');
-    csubstr name_wo_ext = wname.gpop_left('.');
+    csubstr name_wo_ext = wname.name_wo_extshort();
 
     catrs(&fn->m_hdr, name_wo_ext, ".c4gen.hpp");
     catrs(&fn->m_inl, name_wo_ext, ".c4gen.def.hpp");
