@@ -234,11 +234,8 @@ csubstr WriterBase::_incguard(csubstr filename)
     C4_ASSERT(filename.not_empty());
     substr incg = m_tpl_ws_tree.alloc_arena(filename.len + 7);
     cat(incg, filename, "_GUARD_");
-    for(auto $$ c : incg)
-    {
-        if(c == '.' || c == '/' || c == '\\' || c == '-') c = '_';
-        else c = std::toupper(c);
-    }
+    incg.replace("./-\\", '_');
+    incg.toupper();
     return incg;
 }
 
@@ -260,10 +257,7 @@ void WriterBase::extract_filenames(csubstr name, CodeInstances<std::string> $ fn
     std::string tmp = m_file_names.m_src;
     substr wname = to_substr(tmp);
     c4::fs::to_unix_sep(wname.str, wname.len);
-    for(auto &c : wname)
-    {
-        c = std::tolower(c);
-    }
+    wname.tolower();
 
     C4_ASSERT(is_hdr(wname) || is_src(wname));
     csubstr name_wo_ext = wname.name_wo_extshort();

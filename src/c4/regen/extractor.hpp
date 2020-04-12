@@ -63,7 +63,7 @@ struct Extractor
         bool extracted, has_tag;
     };
     Extractor::Data extract(SourceFile c$$ sf, c4::ast::Cursor c) const;
-    
+
 };
 
 
