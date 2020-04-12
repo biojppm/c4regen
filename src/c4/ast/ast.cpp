@@ -221,6 +221,45 @@ inline CXChildVisitResult detail::_visit_impl(CXCursor cursor, CXCursor parent, 
     return ret;
 }
 
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
+//! The returned csubstr is zero-terminated!
+const char* StringCollection::store(CXString s)
+{
+    csubstr ss = to_csubstr(clang_getCString(s));
+    log("INSERT: '{}'", ss);
+    if(ss.empty()) return "";
+
+    // insert a page with an appropriate capacity
+    if(m_pages.empty() || (m_pages.back().size() + ss.len >= m_pages.back().capacity()))
+    {
+        // the page size
+        size_t pglen = ss.len < default_page_size ? default_page_size : ss.len;
+        // make sure pglen is a power of two times the default page size
+        if(pglen > default_page_size)
+        {
+            size_t pgsz = default_page_size;
+            while(pgsz < pglen) pgsz *= 2u;
+            pglen = pgsz;
+        }
+        m_pages.emplace_back();
+        m_pages.back().reserve(pglen);
+    }
+    auto &page = m_pages.back();
+    C4_ASSERT_MSG(page.size() + ss.len < page.capacity());
+    auto const *before = page.data();
+    size_t curr = page.size();
+    page.insert(page.end(), ss.begin(), ss.end());
+    page.insert(page.end(), 0); // make sure it is zero-terminated
+    auto const *after = page.data();
+    C4_ASSERT(before == after);
+    m_strings.push_back(to_csubstr(page).sub(curr));
+    return m_strings.back().str;
+}
+
 } // namespace ast
 } // namespace c4
 

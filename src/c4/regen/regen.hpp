@@ -31,6 +31,8 @@ struct Regen
     std::vector<SourceFile> m_src_files;
     bool                    m_save_src_files;
 
+    ast::StringCollection   m_strings;
+
 public:
 
     Regen() : m_save_src_files(false) {}
@@ -48,7 +50,7 @@ public:
 
 public:
 
-    template <class SourceFileNameCollection>
+    template<class SourceFileNameCollection>
     void gencode(SourceFileNameCollection c$$ collection, const char* db_dir=nullptr, const char* const* flags=nullptr, size_t num_flags=0)
     {
         ast::CompilationDb db(db_dir);
@@ -91,10 +93,12 @@ public:
             sf.init_source_file(idx, unit);
             sf.extract(m_gens_all.data(), m_gens_all.size());
             sf.gencode(m_gens_all.data(), m_gens_all.size(), workspace);
-            
+
             m_writer.write(sf);
         }
         m_writer.end_files();
+
+        m_strings = std::move(idx.yield_strings());
     }
 
     template<class SourceFileNameCollection>

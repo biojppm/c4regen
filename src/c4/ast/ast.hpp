@@ -11,6 +11,7 @@
 #include <c4/substr.hpp>
 #include <c4/fs/fs.hpp>
 #include <c4/c4_push.hpp>
+#include <c4/std/vector.hpp>
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -54,7 +55,7 @@ void visit_children(Cursor root, visitor_pfn visitor, void *data=nullptr, bool s
 
 //-----------------------------------------------------------------------------
 
-template <class T>
+template<class T>
 struct pimpl_handle
 {
     T m_handle;
@@ -108,7 +109,8 @@ struct CompilationDb : pimpl_handle<CXCompilationDatabase>
         if(build_dir == nullptr) return;
         CXCompilationDatabase_Error err;
         m_handle = clang_CompilationDatabase_fromDirectory(build_dir, &err);
-        C4_CHECK_MSG(err == CXCompilationDatabase_NoError, "error constructing compilation database");
+        C4_CHECK_MSG(err == CXCompilationDatabase_NoError,
+                     "error constructing compilation database");
     }
 
     ~CompilationDb()
@@ -153,6 +155,40 @@ struct CompilationDb : pimpl_handle<CXCompilationDatabase>
     thread_local static std::vector<std::string> s_cmd_buf;
 };
 
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+
+struct StringCollection
+{
+
+    //! The returned csubstr is zero-terminated!
+    const char* store(CXString s);
+
+    // use pages to ensure that no string is relocated
+    std::vector<csubstr> m_strings;
+    std::vector<std::vector<char>> m_pages;
+    constexpr static const size_t default_page_size = 1024u;
+
+    C4_NO_COPY_CTOR(StringCollection);
+    C4_NO_COPY_ASSIGN(StringCollection);
+
+    StringCollection() : m_strings(), m_pages() {}
+    StringCollection(StringCollection &&that) = default; //{ _move(&that); }
+    StringCollection& operator= (StringCollection &&that) = default;/*{ _move(&that); return *this; }
+    void _move(StringCollection *that)
+    {
+        print("before: tstr?", that->m_strings.empty());
+        print("before: tbuf?", that->m_pages.empty());
+        m_strings = std::move(that->m_strings);
+        m_pages = std::move(that->m_pages);
+        print("after : tstr?", that->m_strings.empty());
+        print("after : tbuf?", that->m_pages.empty());
+    }*/
+};
+
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
@@ -161,7 +197,7 @@ struct Index : pimpl_handle<CXIndex>
 {
     using pimpl_handle<CXIndex>::pimpl_handle;
 
-    Index() : pimpl_handle(_s_create())
+    Index() : pimpl_handle(_s_create()), m_strings()
     {
     }
 
@@ -185,11 +221,6 @@ private:
 
     void _clear()
     {
-        for(auto &s : m_strings)
-        {
-            clang_disposeString(s);
-        }
-        m_strings.clear();
         if(m_handle)
         {
             clang_disposeIndex(m_handle);
@@ -208,12 +239,16 @@ public:
      */
     const char* store_str(CXString s)
     {
-        m_strings.push_back(s);
-        return clang_getCString(m_strings.back());
+        return m_strings.store(s);
     }
 
-    std::vector<CXString> m_strings;
+    /** move out the string collection for later use */
+    StringCollection&& yield_strings()
+    {
+        return std::move(m_strings);
+    }
 
+    StringCollection m_strings;
 };
 
 inline void print_str(CXString cxs, bool skip_empty=false, const char *fmt="%s")
