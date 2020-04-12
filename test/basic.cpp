@@ -1,6 +1,7 @@
+#include <c4/std/vector.hpp>
+#include <c4/log/log.hpp>
 #include <c4/regen/regen.hpp>
 #include <c4/regen/exec.hpp>
-#include <c4/log/log.hpp>
 #include <c4/yml/yml.hpp>
 #include <gtest/gtest.h>
 
@@ -14,7 +15,7 @@ struct test_unit
     Index idx;
     TranslationUnit unit;
 
-    template< size_t SrcSz, size_t CmdSz >
+    template<size_t SrcSz, size_t CmdSz>
     test_unit(const char (&src)[SrcSz], const char* (&cmd)[CmdSz])
         :
         idx(),
@@ -22,7 +23,7 @@ struct test_unit
     {
     }
 
-    template< size_t SrcSz >
+    template<size_t SrcSz>
     test_unit(const char (&src)[SrcSz])
         :
         idx(),
@@ -224,27 +225,49 @@ struct GenCompare
 
 
 
-void test_regen_exec(const char *cfg_yml_buf, std::initializer_list<SrcAndGen> cases)
+void test_regen_exec(const char *test_name, const char *cfg_yml_buf, std::initializer_list<SrcAndGen> cases)
 {
+    using arg = std::vector<char>;
+    auto putcontents = [](arg const& filename, csubstr contents) {
+        arg tmp_ = filename;
+        substr dirname = to_substr(tmp_).dirname();
+        tmp_[dirname.len] = '\0';
+        fs::mkdirs(dirname.data());
+        fs::file_put_contents(filename.data(), contents);
+    };
+
     csubstr yml = to_csubstr(cfg_yml_buf);
-    auto cfg_file = c4::fs::ScopedTmpFile(yml.str, yml.len, "c4regen-test.XXXXXXXX.cfg.yml", "wb", /*do_delete*/false);
-    std::vector<const char*> args = {"-x", "generate", "-c", cfg_file.m_name, "-f", "'-x'", "-f", "'c++'"};
-    std::vector<c4::fs::ScopedTmpFile> src_files;
-    std::vector<std::string> src_file_fullnames;
-    std::string cwd;
-    fs::cwd(&cwd);
+    arg cwd, tmpdir, casedir, cfgfile, srcfile, srcfilefull;
+    std::vector<arg> src_files;
+    std::vector<arg> src_file_fullnames;
+    // place all test files under this directory
+    tmpdir = fs::tmpnam<arg>("test_tmp/XXXXXXXX/");
+    catrs(append, &tmpdir, to_csubstr(test_name), "/");
+    catrs(&cfgfile, to_csubstr(tmpdir), "c4regen.cfg.yml", '\0');
+    cwd = c4::fs::cwd<arg>();
+    putcontents(cfgfile, yml);
+    std::vector<const char*> args = {
+        "--cmd", "generate",
+        "--flag", "'-x'",
+        "--flag", "c++",
+        "--cfg", cfgfile.data(),
+        "--",
+    };
     for(SrcAndGen sg : cases)
     {
-        src_files.emplace_back(sg.src, strlen(sg.src), "c4regen-test.XXXXXXXX.cpp", "wb", /*do_delete*/false);
-        // we need the full path to the file
-        src_file_fullnames.emplace_back();
-        src_files.back().full_path(&src_file_fullnames.back());
-        args.emplace_back(src_file_fullnames.back().c_str());
+        // use a separate directory for each case
+        catrs(&casedir, to_csubstr(tmpdir), sg.name, "/");
+        catrs(&srcfile, to_csubstr(casedir), "c4regen.cpp", '\0');
+        catrs(&srcfilefull, to_csubstr(cwd), "/", to_csubstr(srcfile)); // we need the full path to the file
+        putcontents(srcfile, to_csubstr(sg.src));
+        src_files.emplace_back(srcfile);
+        src_file_fullnames.emplace_back(srcfilefull);
+        args.emplace_back(src_file_fullnames.back().data());
     }
 
     c4::regen::Regen rg;
     rg.m_save_src_files = true;
-    c4::regen::exec((int)args.size(), args.data(), /*skip_exe_name*/false, &rg);
+    c4::regen::exec(&rg, (int)args.size(), args.data(), /*skip_exe_name*/false);
 
     GenStrs filenames, generated;
 
@@ -261,7 +284,7 @@ void test_regen_exec(const char *cfg_yml_buf, std::initializer_list<SrcAndGen> c
 
 TEST(enums, basic)
 {
-    test_regen_exec(R"(
+    test_regen_exec("enums.basic", R"(
 # one of: stdout, samefile, genfile, gengroup, singlefile
 writer: gengroup
 tpl:
@@ -277,8 +300,7 @@ tpl:
     {% endif %}
     {{src.preamble}}
 generators:
-  -
-    name: enum_symbols
+  - name: enum_symbols
     type: enum # one of: enum, class, function
     extract:
       macro: C4_ENUM
@@ -300,16 +322,19 @@ generators:
 )",
     {{"empty_sources", "", ""},
 
-     {"basic_enum", R"(#define C4_ENUM(...)
+     {"basic_enum",
+      R"(#define C4_ENUM(...)
 C4_ENUM()
 typedef enum {FOO, BAR} MyEnum_e;
-)", 
-     ""},
-    
-     {"enum_with_meta", R"(#define C4_ENUM(...)
+)",
+      /*src*/R"()"},
+
+     {"enum_with_meta",
+      R"(#define C4_ENUM(...)
 C4_ENUM(aaa, bbb: ccc)
 typedef enum {FOO, BAR} MyEnum_e;
-)", ""},
+)",
+      /*src*/R"()"},
     });
 }
 
@@ -317,7 +342,7 @@ typedef enum {FOO, BAR} MyEnum_e;
 
 TEST(classes, basic)
 {
-    test_regen_exec(R"(
+    test_regen_exec("classes.basic", R"(
 writer: gengroup
 generators:
   -

@@ -230,7 +230,6 @@ inline CXChildVisitResult detail::_visit_impl(CXCursor cursor, CXCursor parent, 
 const char* StringCollection::store(CXString s)
 {
     csubstr ss = to_csubstr(clang_getCString(s));
-    log("INSERT: '{}'", ss);
     if(ss.empty()) return "";
 
     // insert a page with an appropriate capacity
