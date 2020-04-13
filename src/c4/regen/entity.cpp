@@ -184,7 +184,7 @@ void TaggedEntity::create_prop_tree(c4::yml::NodeRef n) const
         m_tag.create_prop_tree(n["tag"]);
         if(m_tag.m_spec_str.not_empty())
         {
-            auto a = n["annot"];
+            auto a = n["meta"];
             a |= yml::MAP;
             m_tag.m_annotations.rootref().duplicate_children(a, a.last_child());
         }

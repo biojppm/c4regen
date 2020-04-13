@@ -31,7 +31,7 @@ constexpr const char s_default_tpl_chunk[] = R"(
 /** the template used to render header files */
 constexpr const char s_default_tpl_hdr[] = R"({% if has_hdr != 0 %}
 // DO NOT EDIT!
-// This was automatically generated with https://github.com/biojppm/c4regen
+// This was automatically generated with c4regen: https://github.com/biojppm/c4regen
 
 #ifndef {{hdr.include_guard}}
 #define {{hdr.include_guard}}
@@ -61,7 +61,7 @@ constexpr const char s_default_tpl_hdr[] = R"({% if has_hdr != 0 %}
 /** the template used to render inline (definition header) files */
 constexpr const char s_default_tpl_inl[] = R"({% if has_inl != 0 %}
 // DO NOT EDIT!
-// This was automatically generated with https://github.com/biojppm/c4regen
+// This was automatically generated with c4regen: https://github.com/biojppm/c4regen
 
 #ifndef {{inl.include_guard}}
 #define {{inl.include_guard}}
@@ -93,7 +93,7 @@ constexpr const char s_default_tpl_inl[] = R"({% if has_inl != 0 %}
 /** the template used to render source files */
 constexpr const char s_default_tpl_src[] = R"({% if has_src != 0 %}
 // DO NOT EDIT!
-// This was automatically generated with https://github.com/biojppm/c4regen
+// This was automatically generated with c4regen: https://github.com/biojppm/c4regen
 
 {% if has_hdr %}
 #ifndef {{hdr.include_guard}}
