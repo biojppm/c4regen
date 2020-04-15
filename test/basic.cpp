@@ -601,8 +601,7 @@ void show(bar const& obj);
 #include "c4regen.c4gen.def.hpp"
 
 #endif // C4REGEN_C4GEN_HPP_GUARD_
-
-+)",
+)",
         /*src*/R"(// DO NOT EDIT!
 // This was automatically generated with c4regen: https://github.com/biojppm/c4regen
 
@@ -629,9 +628,9 @@ void show(foo const& obj);
         std::cout << "member: 'x' of type 'float': value=" << obj.x << "\n";
         std::cout << "member: 'y' of type 'float': value=" << obj.y << "\n";
         std::cout << "member: 'z' of type 'float': value=" << obj.z << "\n";
-        
+    
         std::cout << "method: 'some_method(const foo &)' of type 'void (const foo &)'\n";
-        
+    
 }
 
 
@@ -645,10 +644,11 @@ void show(bar const& obj);
         std::cout << "member: 'zx' of type 'float': value=" << obj.zx << "\n";
         std::cout << "member: 'zy' of type 'float': value=" << obj.zy << "\n";
         std::cout << "member: 'zz' of type 'float': value=" << obj.zz << "\n";
-        
+    
         std::cout << "method: 'some_other_method(const bar &)' of type 'void (const bar &)'\n";
-        
+    
 }
+
 
 
 )",
