@@ -232,11 +232,7 @@ void test_regen_exec(const char *test_name, const char *cfg_yml_buf, SrcAndGen s
     using arg = std::vector<char>;
     auto putcontents = [](arg const& filename, csubstr contents) {
         arg tmp_ = filename;
-        substr dirname = to_substr(tmp_).dirname();
-        if(dirname.ends_with('/') || dirname.ends_with('\\'))
-        {
-            dirname = dirname.first(dirname.len - 1);
-        }
+        substr dirname = to_substr(tmp_).dirname().trimr("/\\");
         tmp_[dirname.len] = '\0';
         fs::mkdirs(dirname.data());
         fs::file_put_contents(filename.data(), contents);
@@ -398,7 +394,7 @@ tpl:
     {{hdr.gencode}}
   src: |
     #include "{{hdr.filename}}"
-    
+
     {{src.gencode}}
 generators:
   - name: enum_symbols
@@ -460,9 +456,9 @@ template<> const EnumPairs<MyEnum_e> enum_pairs()
     static constexpr const EnumAndName<MyEnum_e> vals[] = {
                 { FOO, "FOO"},
                 { BAR, "BAR"},
-        
+
     };
-    
+
     EnumPairs<MyEnum_e> r(vals);
     return r;
 }
@@ -475,7 +471,7 @@ template<> const EnumPairs<MyEnum_e> enum_pairs()
 
 TEST(enums_basic, vanilla_with_annotations)
 {
-    
+
     test_regen_exec("enums_basic", basic_enums_cfg, {
         "vanilla_with_meta",
         /*read*/R"(#define C4_ENUM(...)
@@ -496,13 +492,13 @@ template<> const EnumPairs<MyEnum_e> enum_pairs()
     static constexpr const EnumAndName<MyEnum_e> vals[] = {
                 { FOO, "FOO"},
                 { BAR, "BAR"},
-        
+
     };
     /* has meta.aaa: 1 */
     /* meta.aaa is not 0 */
     /* meta.aaa is 1 */
     /* has meta.bbb: ccc */
-    
+
     /* meta.bbb is "ccc" */
     EnumPairs<MyEnum_e> r(vals);
     return r;
@@ -628,9 +624,9 @@ void show(foo const& obj);
         std::cout << "member: 'x' of type 'float': value=" << obj.x << "\n";
         std::cout << "member: 'y' of type 'float': value=" << obj.y << "\n";
         std::cout << "member: 'z' of type 'float': value=" << obj.z << "\n";
-    
+
         std::cout << "method: 'some_method(const foo &)' of type 'void (const foo &)'\n";
-    
+
 }
 
 
@@ -644,9 +640,9 @@ void show(bar const& obj);
         std::cout << "member: 'zx' of type 'float': value=" << obj.zx << "\n";
         std::cout << "member: 'zy' of type 'float': value=" << obj.zy << "\n";
         std::cout << "member: 'zz' of type 'float': value=" << obj.zz << "\n";
-    
+
         std::cout << "method: 'some_other_method(const bar &)' of type 'void (const bar &)'\n";
-    
+
 }
 
 
